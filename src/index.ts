@@ -1,7 +1,7 @@
 import { loadConfig } from "./config.js";
 import { GatewayClient } from "./gatewayClient.js";
 import { Logger, parseLogLevel } from "./logger.js";
-import { GatewayWebSocketTransport } from "./wsTransport.js";
+import { GatewayWebSocketTransport } from "./ws-client.js";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
