@@ -12,4 +12,4 @@
 | 095a947 | 2026-05-19 | DoD 修补: runtime | src/runtime.ts, src/cli.ts, src/gateway-http-client.ts, package.json | npm run build |
 | 8615ed6 | 2026-05-19 | DoD 修补: tests | tests/*.test.ts, src/runtime.ts | npm run build && npm test |
 | 8ca67cd | 2026-05-19 | connector ack | src/ack-tracker.ts, src/dedupe-cache.ts, src/envelope-router.ts, tests/*ack* 等 | npm run build && npm test |
-| TBD | 2026-05-19 | connector mock agent | src/mock-agent.ts, src/stream-emitter.ts, src/sequence-generator.ts | npm run build && npm test |
+| ef9c9db | 2026-05-19 | connector mock agent | src/mock-agent.ts, src/stream-emitter.ts, src/sequence-generator.ts | npm run build && npm test |
