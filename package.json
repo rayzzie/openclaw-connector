@@ -1,0 +1,22 @@
+{
+  "name": "openclaw-connector",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "uniAgentGate OpenClaw connector runtime",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "@types/ws": "^8.5.12",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0"
+  }
+}
