@@ -1,5 +1,6 @@
 import { loadConfig } from "./config.js";
 import { GatewayClient } from "./gatewayClient.js";
+import { GatewayWebSocketTransport } from "./wsTransport.js";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -44,7 +45,10 @@ async function main(): Promise<void> {
       next_heartbeat_in_sec: heartbeat.next_heartbeat_in_sec
     })
   );
-  await runHeartbeatLoop(client, registration.session_token, heartbeat.next_heartbeat_in_sec);
+  void runHeartbeatLoop(client, registration.session_token, heartbeat.next_heartbeat_in_sec);
+
+  const transport = new GatewayWebSocketTransport(config);
+  await transport.connect(registration.session_token);
 }
 
 main().catch((error: unknown) => {
