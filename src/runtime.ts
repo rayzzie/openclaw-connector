@@ -1,4 +1,7 @@
 import type { ConnectorConfig } from "./config.js";
+import { AckTracker } from "./ack-tracker.js";
+import { DedupeCache } from "./dedupe-cache.js";
+import { EnvelopeRouter } from "./envelope-router.js";
 import type {
   AgentLoad,
   GatewayResult,
@@ -7,6 +10,8 @@ import type {
   RegisterRuntimeResponse
 } from "./gateway-http-client.js";
 import type { Logger } from "./logger.js";
+import { MockAgent } from "./mock-agent.js";
+import type { Envelope } from "./protocol.js";
 import { withReconnect, type ReconnectClose, type ReconnectController } from "./reconnect.js";
 import { GatewayWebSocketTransport, type WsCloseEvent } from "./ws-client.js";
 
@@ -22,6 +27,8 @@ export type RuntimeGatewayClient = {
 
 export type RuntimeTransport = {
   connect(sessionToken: string): Promise<void>;
+  send(message: object): Promise<void>;
+  onMessage(handler: (message: Envelope) => void): void;
   close(code: number, reason: string): Promise<void>;
   once(event: "close", handler: (event: WsCloseEvent) => void): unknown;
 };
@@ -143,6 +150,24 @@ export class ConnectorRuntime {
     this.reconnectController = withReconnect(
       async () => {
         const transport = this.options.transportFactory?.() ?? new GatewayWebSocketTransport(this.config, this.logger);
+        const ackTracker = new AckTracker({ ackDeadlineMs: this.config.ackDeadlineMs, ackMaxRetries: this.config.ackMaxRetries });
+        const mockAgent = new MockAgent({
+          mode: this.config.mockMode,
+          ackTracker,
+          send: (message) => transport.send(message),
+          close: (code, reason) => transport.close(code, reason),
+          sleep: this.sleep
+        });
+        const router = new EnvelopeRouter({
+          transport,
+          ackTracker,
+          dedupeCache: new DedupeCache(),
+          dropAgentRequestAck: this.config.mockMode === "ack_drop",
+          onAgentRequest: (message) => mockAgent.handleRequest(message)
+        });
+        transport.onMessage((message: Envelope) => {
+          void router.route(message);
+        });
         const closed = new Promise<WsCloseEvent>((resolve) => {
           transport.once("close", resolve);
         });

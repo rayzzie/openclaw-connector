@@ -14,6 +14,7 @@ export type EnvelopeRouterOptions = {
   ackTracker: AckTracker;
   dedupeCache: DedupeCache;
   onAgentRequest?: (message: AgentRequest) => Promise<void>;
+  dropAgentRequestAck?: boolean;
 };
 
 export class EnvelopeRouter {
@@ -58,7 +59,7 @@ export class EnvelopeRouter {
       await this.options.transport.send(cachedAck);
       return;
     }
-    if (validated.value.ack?.mode === "required") {
+    if (validated.value.ack?.mode === "required" && !this.options.dropAgentRequestAck) {
       await this.options.transport.send(ack);
       this.options.dedupeCache.add(validated.value.message_id, ack);
     }
