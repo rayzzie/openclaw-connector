@@ -9,3 +9,12 @@ Current M2 scope:
 - connect to the Gateway WebSocket transport
 
 This package is an independent process. It does not contain channel logic, media handling, or real OpenClaw SDK integration yet.
+
+## Local
+
+```bash
+npm install
+npm run build
+npm test
+npm run dev
+```

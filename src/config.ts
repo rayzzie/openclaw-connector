@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 export type ConnectorConfig = {
   gatewayBaseUrl: string;
   agentId: string;
