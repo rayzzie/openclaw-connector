@@ -1,6 +1,7 @@
 import WebSocket, { type RawData } from "ws";
 
 import type { ConnectorConfig } from "./config.js";
+import type { Logger } from "./logger.js";
 
 type ConnectionAccepted = {
   type: "connection.accepted";
@@ -26,7 +27,10 @@ export class GatewayWebSocketTransport {
   private heartbeatTimer: NodeJS.Timeout | undefined;
   private heartbeatSequence = 0;
 
-  constructor(private readonly config: ConnectorConfig) {}
+  constructor(
+    private readonly config: ConnectorConfig,
+    private readonly logger: Logger
+  ) {}
 
   connect(sessionToken: string): Promise<void> {
     const ws = new WebSocket(this.wsUrl(), {
@@ -45,13 +49,7 @@ export class GatewayWebSocketTransport {
         if (this.isConnectionAccepted(message)) {
           accepted = true;
           this.startHeartbeat(ws, message);
-          console.log(
-            JSON.stringify({
-              level: "info",
-              msg: "websocket accepted",
-              connection_id: message.connection_id
-            })
-          );
+          this.logger.info("websocket accepted", { connection_id: message.connection_id });
           resolve();
           return;
         }
@@ -60,19 +58,12 @@ export class GatewayWebSocketTransport {
           reject(new Error(`websocket rejected: ${error?.code || "unknown"} ${error?.message || ""}`.trim()));
           return;
         }
-        console.log(JSON.stringify({ level: "debug", msg: "websocket message received", type: message.type }));
+        this.logger.debug("websocket message received", { type: message.type });
       });
 
       ws.on("close", (code, reason) => {
         this.stopHeartbeat();
-        console.log(
-          JSON.stringify({
-            level: "warn",
-            msg: "websocket closed",
-            code,
-            reason: reason.toString()
-          })
-        );
+        this.logger.warn("websocket closed", { code, reason: reason.toString() });
         if (!accepted) {
           reject(new Error(`websocket closed before acceptance: ${code}`));
         }
