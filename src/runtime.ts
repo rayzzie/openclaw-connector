@@ -1,12 +1,29 @@
 import type { ConnectorConfig } from "./config.js";
-import type { GatewayHttpClient, GatewayResult, HeartbeatResponse, RegisterRuntimeResponse } from "./gateway-http-client.js";
+import type {
+  AgentLoad,
+  GatewayResult,
+  HeartbeatResponse,
+  RegisterRuntimePayload,
+  RegisterRuntimeResponse
+} from "./gateway-http-client.js";
 import type { Logger } from "./logger.js";
 import { withReconnect, type ReconnectClose, type ReconnectController } from "./reconnect.js";
 import { GatewayWebSocketTransport, type WsCloseEvent } from "./ws-client.js";
 
 export type RuntimeOptions = {
   sleep?: (ms: number) => Promise<void>;
-  transportFactory?: () => GatewayWebSocketTransport;
+  transportFactory?: () => RuntimeTransport;
+};
+
+export type RuntimeGatewayClient = {
+  register(agentId: string, sk: string, payload: RegisterRuntimePayload): Promise<GatewayResult<RegisterRuntimeResponse>>;
+  heartbeat(sessionToken: string, agentId: string, load: AgentLoad): Promise<GatewayResult<HeartbeatResponse>>;
+};
+
+export type RuntimeTransport = {
+  connect(sessionToken: string): Promise<void>;
+  close(code: number, reason: string): Promise<void>;
+  once(event: "close", handler: (event: WsCloseEvent) => void): unknown;
 };
 
 export class ConnectorRuntime {
@@ -17,7 +34,7 @@ export class ConnectorRuntime {
 
   constructor(
     private readonly config: ConnectorConfig,
-    private readonly client: GatewayHttpClient,
+    private readonly client: RuntimeGatewayClient,
     private readonly logger: Logger,
     private readonly options: RuntimeOptions = {}
   ) {
@@ -156,7 +173,7 @@ class HeartbeatLoop {
 
   constructor(
     private readonly config: ConnectorConfig,
-    private readonly client: GatewayHttpClient,
+    private readonly client: RuntimeGatewayClient,
     private readonly logger: Logger,
     private readonly sessionToken: string,
     private readonly intervalSec: number,

@@ -1,0 +1,135 @@
+import { EventEmitter } from "node:events";
+import { describe, expect, it } from "vitest";
+
+import type { ConnectorConfig } from "../src/config.js";
+import type {
+  AgentLoad,
+  GatewayResult,
+  HeartbeatResponse,
+  RegisterRuntimePayload,
+  RegisterRuntimeResponse
+} from "../src/gateway-http-client.js";
+import { Logger } from "../src/logger.js";
+import { ConnectorRuntime, heartbeatIntervalSec, type RuntimeGatewayClient, type RuntimeTransport } from "../src/runtime.js";
+import type { WsCloseEvent } from "../src/ws-client.js";
+
+const config: ConnectorConfig = {
+  gatewayBaseUrl: "http://gateway",
+  agentId: "agent_001",
+  agentSk: "sk",
+  endpointUrl: "http://connector/callback",
+  agentVersion: "0.1.0",
+  capabilities: ["text"],
+  protocolVersion: "uag.agent.v1",
+  connectRetryMinMs: 1,
+  connectRetryMaxMs: 2,
+  heartbeatIntervalSec: 20,
+  ackDeadlineMs: 3000,
+  ackMaxRetries: 2,
+  mockMode: "happy",
+  logLevel: "error"
+};
+
+describe("ConnectorRuntime", () => {
+  it("uses min(configured heartbeat, ttl/2)", () => {
+    expect(heartbeatIntervalSec(20, 60)).toBe(20);
+    expect(heartbeatIntervalSec(40, 60)).toBe(30);
+  });
+
+  it("retries 5xx register failures three times then exits", async () => {
+    const client = new FakeClient([
+      errorResult(503, "unavailable"),
+      errorResult(503, "unavailable"),
+      errorResult(503, "unavailable")
+    ]);
+    const runtime = new ConnectorRuntime(config, client, new Logger("error"), { sleep: async () => undefined });
+
+    await runtime.start();
+
+    expect(client.registerCalls).toBe(3);
+  });
+
+  it("re-registers after three heartbeat failures", async () => {
+    const client = new FakeClient(
+      [registerResult("token_1"), errorResult(401, "bad_sk")],
+      [errorResult(503, "unavailable"), errorResult(503, "unavailable"), errorResult(503, "unavailable")]
+    );
+    const runtime = new ConnectorRuntime(config, client, new Logger("error"), {
+      sleep: async () => undefined,
+      transportFactory: () => new RejectingTransport()
+    });
+
+    await runtime.start();
+
+    expect(client.registerCalls).toBe(2);
+    expect(client.heartbeatCalls).toBe(3);
+  });
+
+  it("re-registers when heartbeat returns 401", async () => {
+    const client = new FakeClient([registerResult("token_1"), errorResult(401, "bad_sk")], [errorResult(401, "expired")]);
+    const runtime = new ConnectorRuntime(config, client, new Logger("error"), {
+      sleep: async () => undefined,
+      transportFactory: () => new RejectingTransport()
+    });
+
+    await runtime.start();
+
+    expect(client.registerCalls).toBe(2);
+    expect(client.heartbeatCalls).toBe(1);
+  });
+
+  it("stops cleanly", async () => {
+    const client = new FakeClient([registerResult("token_1")]);
+    const runtime = new ConnectorRuntime(config, client, new Logger("error"), { sleep: async () => undefined });
+
+    await runtime.stop("test");
+
+    expect(client.registerCalls).toBe(0);
+  });
+});
+
+class FakeClient implements RuntimeGatewayClient {
+  registerCalls = 0;
+  heartbeatCalls = 0;
+
+  constructor(
+    private readonly registerResults: GatewayResult<RegisterRuntimeResponse>[],
+    private readonly heartbeatResults: GatewayResult<HeartbeatResponse>[] = []
+  ) {}
+
+  async register(_agentId: string, _sk: string, _payload: RegisterRuntimePayload): Promise<GatewayResult<RegisterRuntimeResponse>> {
+    this.registerCalls += 1;
+    return this.registerResults.shift() ?? errorResult(401, "done");
+  }
+
+  async heartbeat(_sessionToken: string, _agentId: string, _load: AgentLoad): Promise<GatewayResult<HeartbeatResponse>> {
+    this.heartbeatCalls += 1;
+    return this.heartbeatResults.shift() ?? errorResult(503, "unavailable");
+  }
+}
+
+class RejectingTransport extends EventEmitter implements RuntimeTransport {
+  async connect(_sessionToken: string): Promise<void> {
+    throw new Error("ws unavailable");
+  }
+
+  async close(_code: number, _reason: string): Promise<void> {
+    this.emit("close", { code: 1000, reason: "closed" } satisfies WsCloseEvent);
+  }
+}
+
+function registerResult(sessionToken: string): GatewayResult<RegisterRuntimeResponse> {
+  return {
+    ok: true,
+    value: {
+      agent_id: "agent_001",
+      session_token: sessionToken,
+      ttl_sec: 60,
+      registered_at: "now"
+    }
+  };
+}
+
+function errorResult<T>(status: number, code: string): GatewayResult<T> {
+  return { ok: false, error: { status, code, message: code } };
+}
