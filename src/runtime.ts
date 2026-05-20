@@ -177,8 +177,14 @@ export class ConnectorRuntime {
           closed,
           close: () => transport.close(1000, "runtime_stop"),
           shouldReconnect: (event: ReconnectClose) => {
+            if (event.code === 4003) {
+              this.stopped = true;
+              this.stopHttpHeartbeat();
+              this.logger.info("exiting", { reason: "connection_replaced" });
+              return false;
+            }
             onDisconnected();
-            return event.code !== 4003;
+            return true;
           }
         };
       },

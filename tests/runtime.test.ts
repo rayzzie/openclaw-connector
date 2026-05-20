@@ -86,6 +86,19 @@ describe("ConnectorRuntime", () => {
 
     expect(client.registerCalls).toBe(0);
   });
+
+  it("does not re-register after connection_replaced", async () => {
+    const client = new FakeClient([registerResult("token_1")]);
+    const transport = new ClosingTransport({ code: 4003, reason: "connection_replaced" });
+    const runtime = new ConnectorRuntime(config, client, new Logger("error"), {
+      sleep: async () => undefined,
+      transportFactory: () => transport
+    });
+
+    await runtime.start();
+
+    expect(client.registerCalls).toBe(1);
+  });
 });
 
 class FakeClient implements RuntimeGatewayClient {
@@ -115,6 +128,24 @@ class RejectingTransport extends EventEmitter implements RuntimeTransport {
 
   async close(_code: number, _reason: string): Promise<void> {
     this.emit("close", { code: 1000, reason: "closed" } satisfies WsCloseEvent);
+  }
+}
+
+class ClosingTransport extends EventEmitter implements RuntimeTransport {
+  constructor(private readonly closeEvent: WsCloseEvent) {
+    super();
+  }
+
+  async connect(_sessionToken: string): Promise<void> {
+    queueMicrotask(() => this.emit("close", this.closeEvent));
+  }
+
+  async send(_message: object): Promise<void> {}
+
+  onMessage(_handler: () => void): void {}
+
+  async close(_code: number, _reason: string): Promise<void> {
+    this.emit("close", this.closeEvent);
   }
 }
 
