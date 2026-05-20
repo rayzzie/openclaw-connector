@@ -72,7 +72,15 @@ export class AckTracker {
         resolve(false);
         return;
       }
-      await sendFn(message);
+      try {
+        await sendFn(message);
+      } catch {
+        if (this.pending.delete(message.message_id)) {
+          await this.options.onFailure?.(message);
+          resolve(false);
+        }
+        return;
+      }
       const acked = await this.waitForAckOrTimeout(message.message_id, this.options.ackDeadlineMs);
       if (acked) {
         return;

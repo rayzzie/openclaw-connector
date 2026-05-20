@@ -79,6 +79,22 @@ describe("AckTracker", () => {
     expect(failures).toEqual(["msg_001"]);
   });
 
+  it("returns false when send function fails", async () => {
+    const failures: string[] = [];
+    const tracker = new AckTracker({
+      ackDeadlineMs: 10,
+      ackMaxRetries: 1,
+      onFailure: (message) => failures.push(message.message_id)
+    });
+
+    const ok = await tracker.send(requiredEnvelope(), async () => {
+      throw new Error("websocket is not open");
+    });
+
+    expect(ok).toBe(false);
+    expect(failures).toEqual(["msg_001"]);
+  });
+
   it("returns false when closed while send pending", async () => {
     const tracker = new AckTracker({ ackDeadlineMs: 50, ackMaxRetries: 1 });
 

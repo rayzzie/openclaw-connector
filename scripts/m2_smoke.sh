@@ -73,6 +73,20 @@ PY
   return 1
 }
 
+wait_for_connector_accepted() {
+  local log_file="$1"
+  for _ in $(seq 1 60); do
+    if [[ -n "${CONNECTOR_PID}" ]] && ! kill -0 "${CONNECTOR_PID}" 2>/dev/null; then
+      return 1
+    fi
+    if grep -q '"msg":"websocket accepted"' "$log_file"; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 wait_for_completed() {
   local request_id="$1"
   for _ in $(seq 1 80); do
@@ -154,6 +168,7 @@ AGENT_SK="$(printf '%s' "$CREATE_RESPONSE" | json_get 'data["sk"]')"
 
 step "start connector happy mode"
 start_connector "happy" "$LOG_DIR/connector-happy.log"
+wait_for_connector_accepted "$LOG_DIR/connector-happy.log" || fail "happy connector did not reach websocket accepted"
 wait_for_online || fail "agent did not become online"
 
 step "dispatch happy request"
@@ -166,6 +181,7 @@ kill "$CONNECTOR_PID" 2>/dev/null || true
 wait "$CONNECTOR_PID" 2>/dev/null || true
 CONNECTOR_PID=""
 start_connector "ack_drop" "$LOG_DIR/connector-ack-drop.log"
+wait_for_connector_accepted "$LOG_DIR/connector-ack-drop.log" || fail "ack_drop connector did not reach websocket accepted"
 wait_for_online || fail "ack_drop agent did not become online"
 
 step "dispatch ack_drop request"
