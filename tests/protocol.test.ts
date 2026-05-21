@@ -4,7 +4,8 @@ import {
   validateAgentRequest,
   validateConnectionAccepted,
   validateEnvelope,
-  validateHeartbeatMessage
+  validateHeartbeatMessage,
+  validateVisualEventPayload
 } from "../src/protocol.js";
 
 describe("protocol validation", () => {
@@ -58,6 +59,29 @@ describe("protocol validation", () => {
       timestamp: "2026-05-19T10:00:00Z",
       agent_id: "agent_001",
       payload: {}
+    });
+
+    expect(result.ok).toBe(false);
+  });
+
+  it("validates visual.frame payload", () => {
+    const result = validateVisualEventPayload({
+      type: "visual.frame",
+      surface: "webchat",
+      mime_type: "image/jpeg",
+      data_base64: "ZnJhbWU=",
+      ttl_ms: 1000
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects visual.asset without url or data_base64", () => {
+    const result = validateVisualEventPayload({
+      type: "visual.asset",
+      asset_type: "image",
+      mime_type: "image/png",
+      display: "replace_surface"
     });
 
     expect(result.ok).toBe(false);

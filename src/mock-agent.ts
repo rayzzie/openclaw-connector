@@ -4,7 +4,15 @@ import type { AgentEvent, AgentRequest } from "./protocol.js";
 import { SequenceGenerator } from "./sequence-generator.js";
 import { StreamEmitter } from "./stream-emitter.js";
 
-export type MockMode = "happy" | "ack_drop" | "sequence_gap" | "slow" | "crash_after_started";
+export type MockMode =
+  | "happy"
+  | "ack_drop"
+  | "sequence_gap"
+  | "slow"
+  | "crash_after_started"
+  | "visual_desktop"
+  | "visual_generated_image"
+  | "no_visual";
 
 export type MockAgentOptions = {
   mode: MockMode | string;
@@ -37,19 +45,71 @@ export class MockAgent {
       ]);
       return;
     }
-    if (this.options.mode === "slow") {
-      await new StreamEmitter(this.emitterOptions()).emit(this.happyEvents(request), [0, 2000, 2000, 0]);
+    if (this.options.mode === "visual_desktop") {
+      await new StreamEmitter(this.emitterOptions()).emit([...this.desktopVisualEvents(request), ...this.speechEvents(request)]);
       return;
     }
-    await new StreamEmitter(this.emitterOptions()).emit(this.happyEvents(request), [100, 0, 0, 0]);
+    if (this.options.mode === "visual_generated_image") {
+      await new StreamEmitter(this.emitterOptions()).emit([...this.generatedImageEvents(request), ...this.speechEvents(request, "图片已生成。", "请看屏幕。")]);
+      return;
+    }
+    if (this.options.mode === "no_visual") {
+      await new StreamEmitter(this.emitterOptions()).emit(this.speechEvents(request));
+      return;
+    }
+    if (this.options.mode === "slow") {
+      await new StreamEmitter(this.emitterOptions()).emit(this.happyEvents(request), [0, 0, 0, 2000, 2000, 0]);
+      return;
+    }
+    await new StreamEmitter(this.emitterOptions()).emit(this.happyEvents(request), [0, 100, 0, 0, 0, 0]);
   }
 
   private happyEvents(request: AgentRequest): AgentEvent[] {
+    return [...this.webchatVisualEvents(request), ...this.speechEvents(request)];
+  }
+
+  private speechEvents(request: AgentRequest, firstDelta = "我看到了，", secondDelta = "请先检查电源线。"): AgentEvent[] {
     return [
       this.event(request, "response.started"),
-      this.event(request, "output.delta", { speech_delta: "我看到了，" }),
-      this.event(request, "output.delta", { speech_delta: "请先检查电源线。" }),
+      this.event(request, "output.delta", { speech_delta: firstDelta }),
+      this.event(request, "output.delta", { speech_delta: secondDelta }),
       this.event(request, "response.completed")
+    ];
+  }
+
+  private webchatVisualEvents(request: AgentRequest): AgentEvent[] {
+    return [
+      this.event(request, "visual.surface.select", { surface: "webchat", reason: "default" }),
+      this.event(request, "visual.frame", {
+        surface: "webchat",
+        mime_type: "image/jpeg",
+        data_base64: "d2ViY2hhdC1mcmFtZQ==",
+        ttl_ms: 1000
+      })
+    ];
+  }
+
+  private desktopVisualEvents(request: AgentRequest): AgentEvent[] {
+    return [
+      this.event(request, "visual.surface.select", { surface: "desktop", reason: "user_requested" }),
+      this.event(request, "visual.frame", {
+        surface: "desktop",
+        mime_type: "image/jpeg",
+        data_base64: "ZGVza3RvcC1mcmFtZQ==",
+        ttl_ms: 1000
+      })
+    ];
+  }
+
+  private generatedImageEvents(request: AgentRequest): AgentEvent[] {
+    return [
+      this.event(request, "visual.asset", {
+        asset_type: "image",
+        mime_type: "image/png",
+        url: `https://example.com/generated/${request.request_id}.png`,
+        display: "replace_surface",
+        ttl_ms: 8000
+      })
     ];
   }
 

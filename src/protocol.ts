@@ -118,6 +118,36 @@ export type AgentError = EnvelopeBase & {
   };
 };
 
+export type VisualSurfaceSelectPayload = {
+  type: "visual.surface.select";
+  surface: string;
+  reason?: string;
+};
+
+export type VisualFramePayload = {
+  type: "visual.frame";
+  surface: string;
+  mime_type: string;
+  data_base64: string;
+  ttl_ms?: number;
+  media_session_id?: string;
+  tracks?: Record<string, unknown>[];
+};
+
+export type VisualAssetPayload = {
+  type: "visual.asset";
+  asset_type: "image" | "video" | string;
+  mime_type: string;
+  display: "replace_surface" | "overlay" | string;
+  ttl_ms?: number;
+  url?: string;
+  data_base64?: string;
+  media_session_id?: string;
+  tracks?: Record<string, unknown>[];
+};
+
+export type VisualEventPayload = VisualSurfaceSelectPayload | VisualFramePayload | VisualAssetPayload;
+
 export type Envelope =
   | ConnectionAccepted
   | ConnectionRejected
@@ -207,6 +237,43 @@ export function validateHeartbeatMessage(value: unknown): ValidationResult<Heart
     return required;
   }
   return { ok: true, value: envelope.value as HeartbeatMessage };
+}
+
+export function validateVisualEventPayload(value: unknown): ValidationResult<VisualEventPayload> {
+  if (!isRecord(value)) {
+    return fail("visual payload must be an object");
+  }
+  if (value.type === "visual.surface.select") {
+    const required = requiredStringFields(value, ["surface"]);
+    if (!required.ok) {
+      return required;
+    }
+    return { ok: true, value: value as VisualSurfaceSelectPayload };
+  }
+  if (value.type === "visual.frame") {
+    const required = requiredStringFields(value, ["surface", "mime_type", "data_base64"]);
+    if (!required.ok) {
+      return required;
+    }
+    if ("ttl_ms" in value && (!Number.isInteger(value.ttl_ms) || Number(value.ttl_ms) <= 0)) {
+      return fail("ttl_ms must be a positive integer when present");
+    }
+    return { ok: true, value: value as VisualFramePayload };
+  }
+  if (value.type === "visual.asset") {
+    const required = requiredStringFields(value, ["asset_type", "mime_type", "display"]);
+    if (!required.ok) {
+      return required;
+    }
+    if (typeof value.url !== "string" && typeof value.data_base64 !== "string") {
+      return fail("visual.asset requires url or data_base64");
+    }
+    if ("ttl_ms" in value && (!Number.isInteger(value.ttl_ms) || Number(value.ttl_ms) <= 0)) {
+      return fail("ttl_ms must be a positive integer when present");
+    }
+    return { ok: true, value: value as VisualAssetPayload };
+  }
+  return fail("unsupported visual payload type");
 }
 
 export function validateAgentRequest(value: unknown): ValidationResult<AgentRequest> {

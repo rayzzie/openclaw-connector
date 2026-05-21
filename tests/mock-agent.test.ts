@@ -9,12 +9,16 @@ describe("MockAgent", () => {
     const sent = await runMode("happy");
 
     expect(sent.map((message) => message.payload.type)).toEqual([
+      "visual.surface.select",
+      "visual.frame",
       "response.started",
       "output.delta",
       "output.delta",
       "response.completed"
     ]);
-    expect(sent.map((message) => message.sequence)).toEqual([1, 2, 3, 4]);
+    expect(sent.map((message) => message.sequence)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(sent[0]?.payload.surface).toBe("webchat");
+    expect(sent[1]?.payload.surface).toBe("webchat");
   });
 
   it("ack_drop mode emits nothing", async () => {
@@ -33,8 +37,46 @@ describe("MockAgent", () => {
     const sleeps: number[] = [];
     const sent = await runMode("slow", sleeps);
 
-    expect(sent.map((message) => message.sequence)).toEqual([1, 2, 3, 4]);
+    expect(sent.map((message) => message.sequence)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(sleeps).toContain(2000);
+  });
+
+  it("visual_desktop mode switches the downlink surface to desktop", async () => {
+    const sent = await runMode("visual_desktop");
+
+    expect(sent[0]?.payload).toMatchObject({
+      type: "visual.surface.select",
+      surface: "desktop",
+      reason: "user_requested"
+    });
+    expect(sent[1]?.payload).toMatchObject({
+      type: "visual.frame",
+      surface: "desktop",
+      mime_type: "image/jpeg"
+    });
+  });
+
+  it("visual_generated_image mode emits a generated image asset", async () => {
+    const sent = await runMode("visual_generated_image");
+
+    expect(sent[0]?.payload).toMatchObject({
+      type: "visual.asset",
+      asset_type: "image",
+      mime_type: "image/png",
+      display: "replace_surface"
+    });
+    expect(sent[0]?.payload.url).toContain("generated");
+  });
+
+  it("no_visual mode keeps speech behavior without visual events", async () => {
+    const sent = await runMode("no_visual");
+
+    expect(sent.map((message) => message.payload.type)).toEqual([
+      "response.started",
+      "output.delta",
+      "output.delta",
+      "response.completed"
+    ]);
   });
 
   it("crash_after_started mode closes after started", async () => {
@@ -61,7 +103,7 @@ describe("MockAgent", () => {
   });
 });
 
-async function runMode(mode: "happy" | "ack_drop" | "sequence_gap" | "slow", sleeps: number[] = []): Promise<AgentEvent[]> {
+async function runMode(mode: "happy" | "ack_drop" | "sequence_gap" | "slow" | "visual_desktop" | "visual_generated_image" | "no_visual", sleeps: number[] = []): Promise<AgentEvent[]> {
   const sent: AgentEvent[] = [];
   const ackTracker = new AckTracker({ ackDeadlineMs: 50, ackMaxRetries: 0 });
   const agent = new MockAgent({
