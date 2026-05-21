@@ -309,6 +309,16 @@ export function validateAgentResponse(value: unknown): ValidationResult<AgentRes
   ]);
 }
 
+export function validateAgentInterrupt(value: unknown): ValidationResult<AgentInterrupt> {
+  return validateBusinessEnvelope<AgentInterrupt>(value, "agent.interrupt", [
+    "agent_id",
+    "session_id",
+    "turn_id",
+    "request_id",
+    "trace_id"
+  ]);
+}
+
 function validateBusinessEnvelope<T extends Envelope>(value: unknown, type: string, fields: string[]): ValidationResult<T> {
   const envelope = validateTypedEnvelope(value, type);
   if (!envelope.ok) {

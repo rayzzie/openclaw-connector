@@ -86,6 +86,32 @@ describe("EnvelopeRouter", () => {
     expect(transport.sent[0]).toMatchObject({ type: "ws.heartbeat" });
   });
 
+  it("acks agent.interrupt without closing the websocket", async () => {
+    const transport = new MemoryTransport();
+    const router = new EnvelopeRouter({
+      transport,
+      ackTracker: new AckTracker({ ackDeadlineMs: 10, ackMaxRetries: 1 }),
+      dedupeCache: new DedupeCache({ ttlMs: 1000, maxEntries: 100 })
+    });
+
+    await router.route({
+      protocol_version: "uag.agent.v1",
+      type: "agent.interrupt",
+      message_id: "msg_interrupt_001",
+      timestamp: "2026-05-21T10:00:00Z",
+      agent_id: "agent_001",
+      session_id: "sess_001",
+      turn_id: "turn_001",
+      request_id: "req_001",
+      trace_id: "trace_001",
+      ack: { mode: "required" },
+      payload: { reason: "user_barge_in" }
+    });
+
+    expect(transport.sent[0]).toMatchObject({ type: "ack", in_reply_to: "msg_interrupt_001" });
+    expect(transport.closed).toBeUndefined();
+  });
+
   it("sends agent.error and closes on unknown type", async () => {
     const transport = new MemoryTransport();
     const router = new EnvelopeRouter({

@@ -1,8 +1,8 @@
 import type { AckTracker } from "./ack-tracker.js";
 import type { DedupeCache } from "./dedupe-cache.js";
 import { newMessageId } from "./message-id.js";
-import type { AgentRequest, Envelope } from "./protocol.js";
-import { validateAgentRequest } from "./protocol.js";
+import type { AgentInterrupt, AgentRequest, Envelope } from "./protocol.js";
+import { validateAgentInterrupt, validateAgentRequest } from "./protocol.js";
 
 export type RouterTransport = {
   send(message: object): Promise<void>;
@@ -44,6 +44,10 @@ export class EnvelopeRouter {
       await this.routeAgentRequest(message);
       return;
     }
+    if (message.type === "agent.interrupt") {
+      await this.routeAgentInterrupt(message);
+      return;
+    }
     await this.protocolError("unknown_type", message.message_id);
   }
 
@@ -64,6 +68,24 @@ export class EnvelopeRouter {
       this.options.dedupeCache.add(validated.value.message_id, ack);
     }
     await this.options.onAgentRequest?.(validated.value);
+  }
+
+  private async routeAgentInterrupt(message: Partial<Envelope>): Promise<void> {
+    const validated = validateAgentInterrupt(message);
+    if (!validated.ok) {
+      await this.protocolError(validated.error, message.message_id);
+      return;
+    }
+    const ack = this.ackFor(validated.value.message_id);
+    const cachedAck = this.options.dedupeCache.get(validated.value.message_id);
+    if (cachedAck) {
+      await this.options.transport.send(cachedAck);
+      return;
+    }
+    if ((validated.value as AgentInterrupt).ack?.mode === "required") {
+      await this.options.transport.send(ack);
+      this.options.dedupeCache.add(validated.value.message_id, ack);
+    }
   }
 
   private async protocolError(code: string, inReplyTo?: string): Promise<void> {
