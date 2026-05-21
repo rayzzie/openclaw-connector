@@ -38,6 +38,7 @@ flowchart LR
 | 748dca1 | 2026-05-20 | 处理 connection.replaced，旧 connector 收到替换后停止运行，不再和新连接抢注册。 | 已完成 |
 | 183b47f | 2026-05-20 | 记录 M2 smoke 远端/本地验收结果，happy 和 ack_drop 核心路径通过。 | 已完成 |
 | a625eed | 2026-05-21 | 扩展 mock agent 视觉下行：`happy` 默认返回 webchat 画面，新增 desktop 切换、generated image 和 no_visual 降级模式。 | 已完成 |
+| 2c435eb | 2026-05-21 | 补齐 `agent.interrupt` 路由，Connector 收到 Gateway interrupt 后返回 ack，不再误判为 unknown type；mock visual frame 改为合法 JPEG，便于 SIP 下行占位渲染。 | 已完成 |
 
 | commit | 时间 | 模块 | 修改文件 | 验证方式 |
 |---|---|---|---|---|
@@ -57,3 +58,4 @@ flowchart LR
 | 748dca1 | 2026-05-20 | replacement handling | src/runtime.ts, tests/runtime.test.ts | npm run build && npm test |
 | 183b47f | 2026-05-20 | M2 smoke verification | scripts/m2_smoke.sh | ./scripts/m2_smoke.sh -> M2 SMOKE OK |
 | a625eed | 2026-05-21 | m3 visual mock | src/mock-agent.ts, src/protocol.ts, tests/mock-agent.test.ts, tests/protocol.test.ts | npm run build && npm test -> 51 passed |
+| 2c435eb | 2026-05-21 | m3 interrupt support | src/envelope-router.ts, src/protocol.ts, src/mock-agent.ts, tests/envelope-router.test.ts | npm run build && npm test -> 52 passed |
