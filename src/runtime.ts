@@ -156,7 +156,12 @@ export class ConnectorRuntime {
           ackTracker,
           send: (message) => transport.send(message),
           close: (code, reason) => transport.close(code, reason),
-          sleep: this.sleep
+          sleep: this.sleep,
+          screenshotUrl: this.config.screenshotUrl,
+          screenshotChromePath: this.config.screenshotChromePath,
+          screenshotWaitMs: this.config.screenshotWaitMs,
+          screenshotQuality: this.config.screenshotQuality,
+          screenshotRefreshMs: this.config.screenshotRefreshMs,
         });
         const router = new EnvelopeRouter({
           transport,

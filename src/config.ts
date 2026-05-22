@@ -15,6 +15,12 @@ export type ConnectorConfig = {
   ackMaxRetries: number;
   mockMode: string;
   logLevel: string;
+  // screenshot mode
+  screenshotUrl: string;
+  screenshotChromePath: string;
+  screenshotWaitMs: number;
+  screenshotQuality: number;
+  screenshotRefreshMs: number;
 };
 
 function requiredEnv(name: string): string {
@@ -59,7 +65,12 @@ export function loadConfig(): ConnectorConfig {
     ackDeadlineMs: optionalIntEnv("UAG_ACK_DEADLINE_MS", 3000),
     ackMaxRetries: optionalIntEnv("UAG_ACK_MAX_RETRIES", 2),
     mockMode: optionalEnv("MOCK_MODE", "happy"),
-    logLevel: optionalEnv("LOG_LEVEL", "info")
+    logLevel: optionalEnv("LOG_LEVEL", "info"),
+    screenshotUrl: optionalEnv("MOCK_SCREENSHOT_URL", ""),
+    screenshotChromePath: optionalEnv("MOCK_CHROME_PATH", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+    screenshotWaitMs: optionalIntEnv("MOCK_SCREENSHOT_WAIT_MS", 500),
+    screenshotQuality: optionalIntEnv("MOCK_SCREENSHOT_QUALITY", 75),
+    screenshotRefreshMs: optionalIntEnv("MOCK_SCREENSHOT_REFRESH_MS", 0),
   };
 }
 

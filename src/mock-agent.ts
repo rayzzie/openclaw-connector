@@ -12,7 +12,8 @@ export type MockMode =
   | "crash_after_started"
   | "visual_desktop"
   | "visual_generated_image"
-  | "no_visual";
+  | "no_visual"
+  | "screenshot";
 
 export type MockAgentOptions = {
   mode: MockMode | string;
@@ -20,6 +21,12 @@ export type MockAgentOptions = {
   send: (message: AgentEvent) => Promise<void>;
   close: (code: number, reason: string) => Promise<void>;
   sleep: (ms: number) => Promise<void>;
+  // screenshot mode options
+  screenshotUrl?: string;
+  screenshotChromePath?: string;
+  screenshotWaitMs?: number;
+  screenshotQuality?: number;
+  screenshotRefreshMs?: number;  // 0 = single shot per request, >0 = keep refreshing during call
 };
 
 export class MockAgent {
@@ -55,6 +62,10 @@ export class MockAgent {
     }
     if (this.options.mode === "no_visual") {
       await new StreamEmitter(this.emitterOptions()).emit(this.speechEvents(request));
+      return;
+    }
+    if (this.options.mode === "screenshot") {
+      await this.handleScreenshot(request);
       return;
     }
     if (this.options.mode === "slow") {
@@ -130,6 +141,65 @@ export class MockAgent {
       ack: { mode: "required" },
       payload: { type: payloadType, ...extraPayload }
     };
+  }
+
+  private async handleScreenshot(request: AgentRequest): Promise<void> {
+    const url = this.options.screenshotUrl;
+    if (!url) {
+      // No URL configured — fall back to speech only
+      await new StreamEmitter(this.emitterOptions()).emit(this.speechEvents(request, "未配置截图地址。", ""));
+      return;
+    }
+
+    const { takeScreenshot } = await import("./screenshotter.js");
+    const refreshMs = this.options.screenshotRefreshMs ?? 0;
+    const emitter = new StreamEmitter(this.emitterOptions());
+
+    // Initial frame + speech
+    let jpegBuf: Buffer;
+    try {
+      jpegBuf = await takeScreenshot({
+        url,
+        executablePath: this.options.screenshotChromePath,
+        waitMs: this.options.screenshotWaitMs ?? 500,
+        quality: this.options.screenshotQuality ?? 75,
+      });
+    } catch (err) {
+      await emitter.emit(this.speechEvents(request, "截图失败，", String(err).slice(0, 60)));
+      return;
+    }
+
+    const b64 = jpegBuf.toString("base64");
+    const ttlMs = refreshMs > 0 ? refreshMs + 500 : 5000;
+
+    // Send initial frame then speech
+    await emitter.emit([
+      this.event(request, "visual.surface.select", { surface: "desktop", reason: "screenshot" }),
+      this.event(request, "visual.frame", { surface: "desktop", mime_type: "image/jpeg", data_base64: b64, ttl_ms: ttlMs }),
+      ...this.speechEvents(request, "已为您打开页面，", "请查看屏幕。"),
+    ]);
+
+    // If refresh enabled, keep pushing updated frames until response.completed is sent
+    if (refreshMs > 0) {
+      const deadline = Date.now() + 30_000; // max 30s
+      while (Date.now() < deadline) {
+        await this.options.sleep(refreshMs);
+        try {
+          const fresh = await takeScreenshot({
+            url,
+            executablePath: this.options.screenshotChromePath,
+            waitMs: 0,
+            quality: this.options.screenshotQuality ?? 75,
+          });
+          const freshB64 = fresh.toString("base64");
+          await this.options.send(
+            this.event(request, "visual.frame", { surface: "desktop", mime_type: "image/jpeg", data_base64: freshB64, ttl_ms: ttlMs })
+          );
+        } catch {
+          break;
+        }
+      }
+    }
   }
 
   private emitterOptions(): { ackTracker: AckTracker; send: (message: AgentEvent) => Promise<void>; sleep: (ms: number) => Promise<void> } {
