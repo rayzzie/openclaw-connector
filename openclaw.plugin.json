@@ -1,0 +1,25 @@
+{
+  "id": "uniagentgate",
+  "name": "uniAgentGate",
+  "description": "Bridges OpenClaw to uniAgentGate (5G RCS + SIP video calls).",
+  "activation": { "onStartup": true },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "gatewayUrl": {
+        "type": "string",
+        "description": "Base URL of uniAgentGate, e.g. http://host:18080"
+      },
+      "agentId": {
+        "type": "string",
+        "description": "Agent ID registered in uniAgentGate"
+      },
+      "agentSk": {
+        "type": "string",
+        "description": "Agent secret key (uag_sk_…)"
+      }
+    },
+    "required": ["gatewayUrl", "agentId", "agentSk"]
+  }
+}
