@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { AckTracker } from "../src/ack-tracker.js";
 import { DedupeCache } from "../src/dedupe-cache.js";
 import { EnvelopeRouter, type RouterTransport } from "../src/envelope-router.js";
-import type { AgentRequest, Envelope } from "../src/protocol.js";
+import type { AgentRequest, AgentInterrupt, Envelope } from "../src/protocol.js";
 
 function request(messageId = "msg_request_001"): AgentRequest {
   return {
@@ -137,6 +137,64 @@ describe("EnvelopeRouter", () => {
     await router.route({ type: "connection.replaced", message_id: "msg_replaced" });
 
     expect(transport.closed).toEqual({ code: 4003, reason: "connection_replaced" });
+  });
+});
+
+describe("onAgentInterrupt hook", () => {
+  it("calls onAgentInterrupt when agent.interrupt arrives", async () => {
+    const received: AgentInterrupt[] = [];
+    const transport = new MemoryTransport();
+    const router = new EnvelopeRouter({
+      transport,
+      ackTracker: new AckTracker({ ackDeadlineMs: 10, ackMaxRetries: 1 }),
+      dedupeCache: new DedupeCache({ ttlMs: 1000, maxEntries: 100 }),
+      onAgentInterrupt: async (msg) => { received.push(msg); }
+    });
+
+    await router.route({
+      protocol_version: "uag.agent.v1",
+      type: "agent.interrupt",
+      message_id: "msg_interrupt_001",
+      timestamp: "2026-05-21T10:00:00Z",
+      agent_id: "agent_001",
+      session_id: "sess_001",
+      turn_id: "turn_001",
+      request_id: "req_001",
+      trace_id: "trace_001",
+      ack: { mode: "required" },
+      payload: { reason: "user_barge_in" }
+    });
+
+    expect(received).toHaveLength(1);
+    expect(received[0].type).toBe("agent.interrupt");
+    expect(transport.sent[0]).toMatchObject({ type: "ack", in_reply_to: "msg_interrupt_001" });
+  });
+
+  it("does not call onAgentInterrupt when not provided", async () => {
+    const transport = new MemoryTransport();
+    const router = new EnvelopeRouter({
+      transport,
+      ackTracker: new AckTracker({ ackDeadlineMs: 10, ackMaxRetries: 1 }),
+      dedupeCache: new DedupeCache({ ttlMs: 1000, maxEntries: 100 })
+    });
+
+    await expect(
+      router.route({
+        protocol_version: "uag.agent.v1",
+        type: "agent.interrupt",
+        message_id: "msg_interrupt_002",
+        timestamp: "2026-05-21T10:00:00Z",
+        agent_id: "agent_001",
+        session_id: "sess_001",
+        turn_id: "turn_001",
+        request_id: "req_001",
+        trace_id: "trace_001",
+        ack: { mode: "required" },
+        payload: { reason: "user_barge_in" }
+      })
+    ).resolves.not.toThrow();
+
+    expect(transport.sent[0]).toMatchObject({ type: "ack", in_reply_to: "msg_interrupt_002" });
   });
 });
 
