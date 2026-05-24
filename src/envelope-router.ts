@@ -14,6 +14,7 @@ export type EnvelopeRouterOptions = {
   ackTracker: AckTracker;
   dedupeCache: DedupeCache;
   onAgentRequest?: (message: AgentRequest) => Promise<void>;
+  onAgentInterrupt?: (message: AgentInterrupt) => Promise<void>;
   dropAgentRequestAck?: boolean;
 };
 
@@ -86,6 +87,7 @@ export class EnvelopeRouter {
       await this.options.transport.send(ack);
       this.options.dedupeCache.add(validated.value.message_id, ack);
     }
+    await this.options.onAgentInterrupt?.(validated.value as AgentInterrupt);
   }
 
   private async protocolError(code: string, inReplyTo?: string): Promise<void> {
