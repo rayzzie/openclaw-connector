@@ -47,6 +47,7 @@ describe("OutboundHandler", () => {
     expect(deltaPayload["type"]).toBe("output.delta");
     expect(deltaPayload["kind"]).toBe("text");
     expect(deltaPayload["text"]).toBe("hello ");
+    expect(deltaPayload["text_delta"]).toBe("hello ");
   });
 
   it("sendCompleted sends response.completed", async () => {

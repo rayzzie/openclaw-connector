@@ -171,4 +171,41 @@ describe("InboundHandler", () => {
     expect(ctx["MessageSid"]).toBe("req_1");
     expect(ctx["text"]).toBe("hello");
   });
+
+  it("uses top-level Gateway channel fields for RCS phone and surface", async () => {
+    const transport = { send: async () => {} };
+
+    let capturedCtx: unknown;
+    const rt = {
+      channel: {
+        reply: {
+          dispatchReplyWithBufferedBlockDispatcher: vi.fn(async ({ ctx }: { ctx: unknown }) => {
+            capturedCtx = ctx;
+          }),
+        },
+      },
+    } as unknown as PluginRuntime;
+
+    const handler = new InboundHandler(transport, rt, "agent:main");
+    await handler.handle({
+      ...makeRequest({
+        payload: {
+          inputs: [{ type: "text", text: "你好" }],
+          metadata: { file_url: "https://example.com/image.jpg" },
+        },
+      }),
+      channel: {
+        type: "rcs",
+        phone_number: "+8618501206838",
+        external_session_id: "+8618501206838",
+      },
+    } as AgentRequest);
+
+    const ctx = capturedCtx as Record<string, unknown>;
+    expect(ctx["SessionKey"]).toBe("uniagentgate:phone:+8618501206838");
+    expect(ctx["From"]).toBe("+8618501206838");
+    expect(ctx["Surface"]).toBe("rcs");
+    expect(ctx["MediaPath"]).toBe("https://example.com/image.jpg");
+    expect(ctx["text"]).toBe("你好");
+  });
 });

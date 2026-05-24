@@ -26,7 +26,7 @@ export class OutboundHandler {
   }
 
   async sendDelta(text: string): Promise<void> {
-    await this.sendEvent("output.delta", { kind: "text", text });
+    await this.sendEvent("output.delta", { kind: "text", text, text_delta: text });
   }
 
   async sendCompleted(): Promise<void> {

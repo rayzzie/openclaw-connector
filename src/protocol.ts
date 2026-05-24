@@ -23,6 +23,13 @@ export type EnvelopeBase = {
   payload?: Record<string, unknown>;
 };
 
+export type ChannelInfo = {
+  type?: string;
+  name?: string;
+  external_session_id?: string;
+  phone_number?: string;
+};
+
 export type ConnectionAccepted = EnvelopeBase & {
   type: "connection.accepted";
   connection_id: string;
@@ -72,6 +79,9 @@ export type AgentRequest = EnvelopeBase & {
   turn_id: string;
   request_id: string;
   trace_id: string;
+  channel?: ChannelInfo;
+  delivery_profile?: Record<string, unknown>;
+  capabilities?: Record<string, unknown>;
   payload: Record<string, unknown>;
 };
 
