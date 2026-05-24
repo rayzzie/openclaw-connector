@@ -1,10 +1,9 @@
-import "dotenv/config";
+import type { PluginConfig } from "./plugin-config.js";
 
 export type ConnectorConfig = {
   gatewayBaseUrl: string;
   agentId: string;
   agentSk: string;
-  endpointUrl: string;
   agentVersion: string;
   capabilities: string[];
   protocolVersion: string;
@@ -13,64 +12,21 @@ export type ConnectorConfig = {
   heartbeatIntervalSec: number;
   ackDeadlineMs: number;
   ackMaxRetries: number;
-  mockMode: string;
-  logLevel: string;
-  // screenshot mode
-  screenshotUrl: string;
-  screenshotChromePath: string;
-  screenshotWaitMs: number;
-  screenshotQuality: number;
-  screenshotRefreshMs: number;
 };
 
-function requiredEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-  return value;
-}
-
-function optionalEnv(name: string, fallback: string): string {
-  return process.env[name] || fallback;
-}
-
-function optionalIntEnv(name: string, fallback: number): number {
-  const value = process.env[name];
-  if (!value) {
-    return fallback;
-  }
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed)) {
-    throw new Error(`Invalid integer environment variable: ${name}`);
-  }
-  return parsed;
-}
-
-export function loadConfig(): ConnectorConfig {
+export function configFromPlugin(pluginConfig: PluginConfig): ConnectorConfig {
   return {
-    gatewayBaseUrl: optionalEnv("UAG_GATEWAY_BASE_URL", "http://127.0.0.1:8080").replace(/\/+$/, ""),
-    agentId: requiredEnv("UAG_AGENT_ID"),
-    agentSk: requiredEnv("UAG_AGENT_SK"),
-    endpointUrl: optionalEnv("UAG_ENDPOINT_URL", "http://127.0.0.1:18081/callback"),
-    agentVersion: optionalEnv("UAG_AGENT_VERSION", "0.1.0"),
-    capabilities: optionalEnv("UAG_CAPABILITIES", "text,speech")
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean),
-    protocolVersion: optionalEnv("UAG_PROTOCOL_VERSION", "uag.agent.v1"),
-    connectRetryMinMs: optionalIntEnv("UAG_CONNECT_RETRY_MIN_MS", 1000),
-    connectRetryMaxMs: optionalIntEnv("UAG_CONNECT_RETRY_MAX_MS", 30000),
-    heartbeatIntervalSec: optionalIntEnv("UAG_HEARTBEAT_INTERVAL_SEC", 20),
-    ackDeadlineMs: optionalIntEnv("UAG_ACK_DEADLINE_MS", 3000),
-    ackMaxRetries: optionalIntEnv("UAG_ACK_MAX_RETRIES", 2),
-    mockMode: optionalEnv("MOCK_MODE", "happy"),
-    logLevel: optionalEnv("LOG_LEVEL", "info"),
-    screenshotUrl: optionalEnv("MOCK_SCREENSHOT_URL", ""),
-    screenshotChromePath: optionalEnv("MOCK_CHROME_PATH", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
-    screenshotWaitMs: optionalIntEnv("MOCK_SCREENSHOT_WAIT_MS", 500),
-    screenshotQuality: optionalIntEnv("MOCK_SCREENSHOT_QUALITY", 75),
-    screenshotRefreshMs: optionalIntEnv("MOCK_SCREENSHOT_REFRESH_MS", 0),
+    gatewayBaseUrl: pluginConfig.gatewayUrl,
+    agentId: pluginConfig.agentId,
+    agentSk: pluginConfig.agentSk,
+    agentVersion: "1.0.0",
+    capabilities: ["text", "speech"],
+    protocolVersion: "uag.agent.v1",
+    connectRetryMinMs: 1000,
+    connectRetryMaxMs: 30000,
+    heartbeatIntervalSec: 20,
+    ackDeadlineMs: 3000,
+    ackMaxRetries: 2,
   };
 }
 

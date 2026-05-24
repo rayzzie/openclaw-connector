@@ -5,7 +5,7 @@ import WebSocket, { WebSocketServer } from "ws";
 
 import type { ConnectorConfig } from "../src/config.js";
 import { Logger } from "../src/logger.js";
-import { GatewayWebSocketTransport } from "../src/ws-client.js";
+import { GatewayWebSocketTransport } from "../src/gateway-ws-client.js";
 
 let httpServer: Server | undefined;
 let wsServer: WebSocketServer | undefined;
@@ -114,7 +114,6 @@ function config(gatewayBaseUrl: string): ConnectorConfig {
     gatewayBaseUrl,
     agentId: "agent_001",
     agentSk: "sk",
-    endpointUrl: "http://connector/callback",
     agentVersion: "0.1.0",
     capabilities: ["text"],
     protocolVersion: "uag.agent.v1",
@@ -123,8 +122,6 @@ function config(gatewayBaseUrl: string): ConnectorConfig {
     heartbeatIntervalSec: 20,
     ackDeadlineMs: 3000,
     ackMaxRetries: 2,
-    mockMode: "happy",
-    logLevel: "error"
   };
 }
 

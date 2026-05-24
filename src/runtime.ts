@@ -2,27 +2,44 @@ import type { ConnectorConfig } from "./config.js";
 import { AckTracker } from "./ack-tracker.js";
 import { DedupeCache } from "./dedupe-cache.js";
 import { EnvelopeRouter } from "./envelope-router.js";
-import type {
-  AgentLoad,
-  GatewayResult,
-  HeartbeatResponse,
-  RegisterRuntimePayload,
-  RegisterRuntimeResponse
-} from "./gateway-http-client.js";
-import type { Logger } from "./logger.js";
-import { MockAgent } from "./mock-agent.js";
-import type { Envelope } from "./protocol.js";
+import type { AgentInterrupt, AgentRequest, Envelope } from "./protocol.js";
 import { withReconnect, type ReconnectClose, type ReconnectController } from "./reconnect.js";
-import { GatewayWebSocketTransport, type WsCloseEvent } from "./ws-client.js";
+import { GatewayWebSocketTransport, type WsCloseEvent } from "./gateway-ws-client.js";
+import type { Logger } from "./logger.js";
 
-export type RuntimeOptions = {
-  sleep?: (ms: number) => Promise<void>;
-  transportFactory?: () => RuntimeTransport;
+export type RegisterRuntimePayload = {
+  version: string;
+  capabilities: string[];
+  endpoint_url?: string;
 };
+
+export type RegisterRuntimeResponse = {
+  session_token: string;
+  ttl_sec: number;
+};
+
+export type HeartbeatResponse = {
+  next_heartbeat_in_sec: number;
+};
+
+export type AgentLoad = {
+  active_sessions: number;
+};
+
+export type GatewayResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: { status: number; code: string; message: string } };
 
 export type RuntimeGatewayClient = {
   register(agentId: string, sk: string, payload: RegisterRuntimePayload): Promise<GatewayResult<RegisterRuntimeResponse>>;
   heartbeat(sessionToken: string, agentId: string, load: AgentLoad): Promise<GatewayResult<HeartbeatResponse>>;
+};
+
+export type RuntimeOptions = {
+  sleep?: (ms: number) => Promise<void>;
+  transportFactory?: () => RuntimeTransport;
+  onAgentRequest?: (message: AgentRequest) => Promise<void>;
+  onAgentInterrupt?: (message: AgentInterrupt) => Promise<void>;
 };
 
 export type RuntimeTransport = {
@@ -43,17 +60,9 @@ export class ConnectorRuntime {
     private readonly config: ConnectorConfig,
     private readonly client: RuntimeGatewayClient,
     private readonly logger: Logger,
-    private readonly options: RuntimeOptions = {}
+    private readonly options: RuntimeOptions = {},
   ) {
     this.sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-  }
-
-  installSignalHandlers(): void {
-    const exit = () => {
-      void this.stop("signal");
-    };
-    process.once("SIGINT", exit);
-    process.once("SIGTERM", exit);
   }
 
   async start(): Promise<void> {
@@ -71,12 +80,8 @@ export class ConnectorRuntime {
       this.startHttpHeartbeat(registration.session_token, intervalSec, markNeedsRegister);
       this.startWebSocketLoop(
         registration.session_token,
-        () => {
-          this.stopHttpHeartbeat();
-        },
-        () => {
-          this.startHttpHeartbeat(registration.session_token, intervalSec, markNeedsRegister);
-        }
+        () => { this.stopHttpHeartbeat(); },
+        () => { this.startHttpHeartbeat(registration.session_token, intervalSec, markNeedsRegister); },
       );
 
       while (!this.stopped && !needsRegister) {
@@ -103,19 +108,18 @@ export class ConnectorRuntime {
       const result = await this.client.register(this.config.agentId, this.config.agentSk, {
         version: this.config.agentVersion,
         capabilities: this.config.capabilities,
-        endpoint_url: this.config.endpointUrl
       });
       if (result.ok) {
         this.logger.info("connector registered", {
           agent_id: this.config.agentId,
-          ttl_sec: result.value.ttl_sec
+          ttl_sec: result.value.ttl_sec,
         });
         return result.value;
       }
       this.logger.warn("register failed", {
         status: result.error.status,
         code: result.error.code,
-        message: result.error.message
+        message: result.error.message,
       });
       if (result.error.status >= 400 && result.error.status < 500) {
         return undefined;
@@ -133,9 +137,6 @@ export class ConnectorRuntime {
     if (this.activeHeartbeat) {
       return;
     }
-    // HTTP heartbeat is a fallback lease renewal. Once WS is accepted, WS
-    // heartbeat renews the same Gateway lease and this loop is stopped, so we
-    // do not double-send lease traffic while the real-time channel is healthy.
     const loop = new HeartbeatLoop(this.config, this.client, this.logger, sessionToken, intervalSec, onNeedsRegister, this.sleep);
     this.activeHeartbeat = loop;
     loop.start();
@@ -151,24 +152,12 @@ export class ConnectorRuntime {
       async () => {
         const transport = this.options.transportFactory?.() ?? new GatewayWebSocketTransport(this.config, this.logger);
         const ackTracker = new AckTracker({ ackDeadlineMs: this.config.ackDeadlineMs, ackMaxRetries: this.config.ackMaxRetries });
-        const mockAgent = new MockAgent({
-          mode: this.config.mockMode,
-          ackTracker,
-          send: (message) => transport.send(message),
-          close: (code, reason) => transport.close(code, reason),
-          sleep: this.sleep,
-          screenshotUrl: this.config.screenshotUrl,
-          screenshotChromePath: this.config.screenshotChromePath,
-          screenshotWaitMs: this.config.screenshotWaitMs,
-          screenshotQuality: this.config.screenshotQuality,
-          screenshotRefreshMs: this.config.screenshotRefreshMs,
-        });
         const router = new EnvelopeRouter({
           transport,
           ackTracker,
           dedupeCache: new DedupeCache(),
-          dropAgentRequestAck: this.config.mockMode === "ack_drop",
-          onAgentRequest: (message) => mockAgent.handleRequest(message)
+          onAgentRequest: this.options.onAgentRequest,
+          onAgentInterrupt: this.options.onAgentInterrupt,
         });
         transport.onMessage((message: Envelope) => {
           void router.route(message);
@@ -190,15 +179,15 @@ export class ConnectorRuntime {
             }
             onDisconnected();
             return true;
-          }
+          },
         };
       },
       {
         minDelayMs: this.config.connectRetryMinMs,
         maxDelayMs: this.config.connectRetryMaxMs,
         logger: this.logger,
-        sleep: this.sleep
-      }
+        sleep: this.sleep,
+      },
     );
   }
 }
@@ -214,7 +203,7 @@ class HeartbeatLoop {
     private readonly sessionToken: string,
     private readonly intervalSec: number,
     private readonly onNeedsRegister: () => void,
-    private readonly sleep: (ms: number) => Promise<void>
+    private readonly sleep: (ms: number) => Promise<void>,
   ) {}
 
   start(): void {
@@ -231,7 +220,7 @@ class HeartbeatLoop {
       if (this.stopped) {
         return;
       }
-      const result: GatewayResult<HeartbeatResponse> = await this.client.heartbeat(this.sessionToken, this.config.agentId, { active_sessions: 0 });
+      const result = await this.client.heartbeat(this.sessionToken, this.config.agentId, { active_sessions: 0 });
       if (result.ok) {
         this.failures = 0;
         this.logger.debug("http heartbeat sent", { next_heartbeat_in_sec: result.value.next_heartbeat_in_sec });
@@ -241,7 +230,7 @@ class HeartbeatLoop {
       this.logger.warn("http heartbeat failed", {
         status: result.error.status,
         code: result.error.code,
-        failures: this.failures
+        failures: this.failures,
       });
       if (result.error.status === 401 || this.failures >= 3) {
         this.onNeedsRegister();

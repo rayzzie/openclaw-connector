@@ -2,22 +2,24 @@ import { EventEmitter } from "node:events";
 import { describe, expect, it } from "vitest";
 
 import type { ConnectorConfig } from "../src/config.js";
-import type {
-  AgentLoad,
-  GatewayResult,
-  HeartbeatResponse,
-  RegisterRuntimePayload,
-  RegisterRuntimeResponse
-} from "../src/gateway-http-client.js";
 import { Logger } from "../src/logger.js";
-import { ConnectorRuntime, heartbeatIntervalSec, type RuntimeGatewayClient, type RuntimeTransport } from "../src/runtime.js";
-import type { WsCloseEvent } from "../src/ws-client.js";
+import {
+  ConnectorRuntime,
+  heartbeatIntervalSec,
+  type AgentLoad,
+  type GatewayResult,
+  type HeartbeatResponse,
+  type RegisterRuntimePayload,
+  type RegisterRuntimeResponse,
+  type RuntimeGatewayClient,
+  type RuntimeTransport,
+} from "../src/runtime.js";
+import type { WsCloseEvent } from "../src/gateway-ws-client.js";
 
 const config: ConnectorConfig = {
   gatewayBaseUrl: "http://gateway",
   agentId: "agent_001",
   agentSk: "sk",
-  endpointUrl: "http://connector/callback",
   agentVersion: "0.1.0",
   capabilities: ["text"],
   protocolVersion: "uag.agent.v1",
@@ -26,8 +28,6 @@ const config: ConnectorConfig = {
   heartbeatIntervalSec: 20,
   ackDeadlineMs: 3000,
   ackMaxRetries: 2,
-  mockMode: "happy",
-  logLevel: "error"
 };
 
 describe("ConnectorRuntime", () => {
@@ -99,6 +99,17 @@ describe("ConnectorRuntime", () => {
 
     expect(client.registerCalls).toBe(1);
   });
+
+  it("accepts onAgentRequest and onAgentInterrupt in options", () => {
+    const client = new FakeClient([]);
+    const runtime = new ConnectorRuntime(config, client, new Logger("error"), {
+      sleep: async () => undefined,
+      onAgentRequest: async (_msg) => {},
+      onAgentInterrupt: async (_msg) => {},
+    });
+    // Just verifies the constructor accepts these options without error
+    expect(runtime).toBeDefined();
+  });
 });
 
 class FakeClient implements RuntimeGatewayClient {
@@ -153,10 +164,8 @@ function registerResult(sessionToken: string): GatewayResult<RegisterRuntimeResp
   return {
     ok: true,
     value: {
-      agent_id: "agent_001",
       session_token: sessionToken,
       ttl_sec: 60,
-      registered_at: "now"
     }
   };
 }
