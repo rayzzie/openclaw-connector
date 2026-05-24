@@ -37,6 +37,7 @@ export default definePluginEntry({
       { send: (m) => currentSend(m) },
       api.runtime,
       config.agentId,
+      logger,
     );
 
     const gatewayClient = makeGatewayClient(pluginConfig.gatewayUrl);

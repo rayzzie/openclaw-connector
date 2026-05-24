@@ -3,6 +3,7 @@ import type { AgentInterrupt, AgentRequest } from "./protocol.js";
 import { buildSessionKey } from "./session-key.js";
 import { OutboundHandler, type OutboundTransport } from "./outbound-handler.js";
 import { newMessageId } from "./message-id.js";
+import type { Logger } from "./logger.js";
 
 type RequestInput = {
   type?: string;
@@ -19,6 +20,7 @@ export class InboundHandler {
     private readonly transport: OutboundTransport,
     private readonly rt: PluginRuntime,
     private readonly agentId: string,
+    private readonly logger?: Logger,
   ) {}
 
   async handle(request: AgentRequest): Promise<void> {
@@ -36,6 +38,14 @@ export class InboundHandler {
       "";
     const imageUrl = firstMediaUrl(inputs) ?? stringValue(metadata?.["file_url"]);
     const surface = stringValue(requestChannel?.type) ?? payloadChannel ?? "rcs";
+
+    this.logger?.info("agent.request received", {
+      request_id: request.request_id,
+      session_id: request.session_id,
+      input_len: text.length,
+      phone_suffix: phone.slice(-4),
+      surface,
+    });
 
     const responseId = newMessageId("resp");
     const outbound = new OutboundHandler(this.transport, {
@@ -74,17 +84,36 @@ export class InboundHandler {
 
     await outbound.sendStarted();
 
+    let deltaCount = 0;
     try {
+      this.logger?.info("dispatch started", {
+        request_id: request.request_id,
+        session_id: request.session_id,
+      });
+
       await this.rt.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
         ctx,
         dispatcherOptions: {
           deliver: async (payload: { text?: string }) => {
             if (payload.text) {
+              deltaCount += 1;
+              this.logger?.debug("deliver called", {
+                request_id: request.request_id,
+                text_len: payload.text.length,
+                delta_seq: deltaCount,
+              });
               await outbound.sendDelta(payload.text);
+            } else {
+              this.logger?.warn("deliver_empty", { request_id: request.request_id });
             }
           },
         },
         signal: abortController.signal,
+      });
+
+      this.logger?.info("dispatch completed", {
+        request_id: request.request_id,
+        delta_count: deltaCount,
       });
       await outbound.sendCompleted();
     } catch (err) {
@@ -92,8 +121,11 @@ export class InboundHandler {
         abortController.signal.aborted ||
         (err instanceof DOMException && err.name === "AbortError")
       ) {
+        this.logger?.info("dispatch interrupted", { request_id: request.request_id });
         await outbound.sendInterrupted();
       } else {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger?.error("dispatch failed", { request_id: request.request_id, error: message });
         await outbound.sendFailed(err);
       }
     } finally {

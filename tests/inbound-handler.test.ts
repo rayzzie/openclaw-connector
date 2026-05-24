@@ -176,6 +176,35 @@ describe("InboundHandler", () => {
     expect(ctx["RawBody"]).toBe("hello");
   });
 
+  it("does not send output.delta when deliver is called with empty or missing text", async () => {
+    const sent: object[] = [];
+    const transport = { send: async (m: object) => { sent.push(m); } };
+
+    const rt = {
+      channel: {
+        reply: {
+          dispatchReplyWithBufferedBlockDispatcher: vi.fn(
+            async ({ dispatcherOptions }: { dispatcherOptions: { deliver: (p: { text?: string }) => Promise<void> } }) => {
+              await dispatcherOptions.deliver({});
+              await dispatcherOptions.deliver({ text: "" });
+              await dispatcherOptions.deliver({ text: "real" });
+            }
+          ),
+        },
+      },
+    } as unknown as PluginRuntime;
+
+    const handler = new InboundHandler(transport, rt, "agent:main");
+    await handler.handle(makeRequest());
+
+    const types = sent.map(
+      (m) => ((m as Record<string, unknown>)["payload"] as Record<string, unknown>)["type"]
+    );
+    expect(types).toEqual(["response.started", "output.delta", "response.completed"]);
+    const deltaPayload = (sent[1] as Record<string, unknown>)["payload"] as Record<string, unknown>;
+    expect(deltaPayload["text"]).toBe("real");
+  });
+
   it("uses top-level Gateway channel fields for RCS phone and surface", async () => {
     const transport = { send: async () => {} };
 
