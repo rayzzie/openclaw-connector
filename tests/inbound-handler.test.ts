@@ -170,6 +170,10 @@ describe("InboundHandler", () => {
     expect(ctx["Surface"]).toBe("rcs");
     expect(ctx["MessageSid"]).toBe("req_1");
     expect(ctx["text"]).toBe("hello");
+    expect(ctx["Body"]).toBe("hello");
+    expect(ctx["BodyForAgent"]).toBe("hello");
+    expect(ctx["CommandBody"]).toBe("hello");
+    expect(ctx["RawBody"]).toBe("hello");
   });
 
   it("uses top-level Gateway channel fields for RCS phone and surface", async () => {

@@ -51,13 +51,21 @@ export class InboundHandler {
     this.activeAborts.set(request.turn_id, abortController);
 
     const ctx: Record<string, unknown> = {
+      Body: text,
+      BodyForAgent: text,
+      CommandBody: text,
+      RawBody: text,
       SessionKey: buildSessionKey(phone),
       From: phone,
       To: this.agentId,
+      AccountId: "default",
       ChatType: "direct",
       Provider: "uniagentgate",
       Surface: surface,
       MessageSid: request.request_id,
+      Timestamp: Date.now(),
+      OriginatingChannel: surface,
+      OriginatingTo: phone,
       text,
     };
     if (imageUrl) {
