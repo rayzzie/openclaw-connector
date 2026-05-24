@@ -61,3 +61,4 @@ flowchart LR
 | 2c435eb | 2026-05-21 | m3 interrupt support | src/envelope-router.ts, src/protocol.ts, src/mock-agent.ts, tests/envelope-router.test.ts | npm run build && npm test -> 52 passed |
 | ae6adfe | 2026-05-25 | openclaw channel install | package.json, package-lock.json, index.ts, src/types/openclaw-sdk.d.ts, .gitignore | npm run build && npm test; openclaw plugins install --link; openclaw plugins inspect uniagentgate |
 | fbf3f18 | 2026-05-25 | rcs openclaw interaction | src/inbound-handler.ts, src/outbound-handler.ts, src/protocol.ts, tests/inbound-handler.test.ts, tests/outbound-handler.test.ts | npm run build && npm test -> 70 passed; remote smoke blocked because Gateway :18080 unreachable |
+| aaeba4a | 2026-05-25 | openclaw inbound context | src/inbound-handler.ts, tests/inbound-handler.test.ts | npm run build && npm test -> 70 passed; RCS smoke still returned fallback before this ctx fix |
