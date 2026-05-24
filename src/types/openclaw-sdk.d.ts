@@ -25,7 +25,7 @@ declare module "openclaw/plugin-sdk/core" {
   }
 
   export function definePluginEntry(entry: {
-    register(api: OpenClawPluginApi): Promise<void>;
-    unregister?(): Promise<void>;
+    register(api: OpenClawPluginApi): void | Promise<void>;
+    unregister?(): void | Promise<void>;
   }): unknown;
 }

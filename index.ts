@@ -10,7 +10,7 @@ import { GatewayWebSocketTransport } from "./src/gateway-ws-client.js";
 import { Logger } from "./src/logger.js";
 
 export default definePluginEntry({
-  async register(api: OpenClawPluginApi): Promise<void> {
+  register(api: OpenClawPluginApi): void {
     setRuntime(api.runtime);
 
     const pluginConfig = resolvePluginConfig(api.pluginConfig);
@@ -56,7 +56,7 @@ export default definePluginEntry({
     });
   },
 
-  async unregister(): Promise<void> {
+  unregister(): void {
     setRuntime(undefined);
   },
 });

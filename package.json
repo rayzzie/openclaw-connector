@@ -3,7 +3,36 @@
   "version": "1.0.0",
   "type": "module",
   "description": "OpenClaw channel plugin — bridges to uniAgentGate (5G RCS + SIP video)",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "files": [
+    "dist/**/*.js",
+    "openclaw.plugin.json",
+    "README.md"
+  ],
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ],
+    "channels": [
+      "uniagentgate"
+    ],
+    "channel": {
+      "id": "uniagentgate",
+      "label": "uniAgentGate",
+      "selectionLabel": "uniAgentGate (RCS + SIP Video)",
+      "blurb": "Bridge OpenClaw conversations to uniAgentGate channel runtimes.",
+      "order": 60,
+      "aliases": [
+        "uniagentgate",
+        "uag"
+      ]
+    },
+    "install": {
+      "localPath": ".",
+      "defaultChoice": "local",
+      "minHostVersion": ">=2026.4.1"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -11,10 +40,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "openclaw/plugin-sdk/core": "*",
-    "openclaw/plugin-sdk/reply-runtime": "*",
-    "openclaw/plugin-sdk/runtime-store": "*",
     "ws": "^8.18.0"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.4.1"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "^20.12.0",
