@@ -176,6 +176,32 @@ describe("InboundHandler", () => {
     expect(ctx["RawBody"]).toBe("hello");
   });
 
+  it("sends response.completed even when all deliver calls have empty text (empty_agent_response path)", async () => {
+    const sent: object[] = [];
+    const transport = { send: async (m: object) => { sent.push(m); } };
+
+    const rt = {
+      channel: {
+        reply: {
+          dispatchReplyWithBufferedBlockDispatcher: vi.fn(
+            async ({ dispatcherOptions }: { dispatcherOptions: { deliver: (p: { text?: string }) => Promise<void> } }) => {
+              await dispatcherOptions.deliver({});
+              await dispatcherOptions.deliver({ text: "" });
+            }
+          ),
+        },
+      },
+    } as unknown as PluginRuntime;
+
+    const handler = new InboundHandler(transport, rt, "agent:main");
+    await handler.handle(makeRequest());
+
+    const types = sent.map(
+      (m) => ((m as Record<string, unknown>)["payload"] as Record<string, unknown>)["type"]
+    );
+    expect(types).toEqual(["response.started", "response.completed"]);
+  });
+
   it("does not send output.delta when deliver is called with empty or missing text", async () => {
     const sent: object[] = [];
     const transport = { send: async (m: object) => { sent.push(m); } };

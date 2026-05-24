@@ -125,7 +125,12 @@ export class InboundHandler {
         await outbound.sendInterrupted();
       } else {
         const message = err instanceof Error ? err.message : String(err);
-        this.logger?.error("dispatch failed", { request_id: request.request_id, error: message });
+        const stack = err instanceof Error ? (err.stack ?? "") : "";
+        this.logger?.error("dispatch failed", {
+          request_id: request.request_id,
+          error: message,
+          stack: stack.split("\n")[1]?.trim() ?? "",
+        });
         await outbound.sendFailed(err);
       }
     } finally {
