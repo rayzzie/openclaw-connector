@@ -42,7 +42,7 @@ export class GatewayWebSocketTransport extends EventEmitter<WsClientEvents> {
         "Authorization": `Bearer ${sessionToken}`,
         "X-Agent-Id": this.config.agentId,
         "X-UAG-Protocol-Version": this.config.protocolVersion
-      }
+      },
     });
     this.socket = ws;
 
@@ -92,11 +92,11 @@ export class GatewayWebSocketTransport extends EventEmitter<WsClientEvents> {
       ws.on("close", (code, reasonBuffer) => {
         this.stopHeartbeat();
         const closeEvent = { code, reason: reasonBuffer.toString() };
-        this.logger.warn("websocket closed", closeEvent);
+        this.logger.info("websocket closed", closeEvent);
         this.emit("close", closeEvent);
         if (!accepted && !settled) {
           settled = true;
-          reject(new Error(`websocket closed before acceptance: ${code}`));
+          reject(new Error(`websocket closed before acceptance: ${code} ${closeEvent.reason}`));
         }
       });
 
