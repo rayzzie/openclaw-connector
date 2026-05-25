@@ -82,6 +82,7 @@ export class ConnectorRuntime {
         registration.session_token,
         () => { this.stopHttpHeartbeat(); },
         () => { this.startHttpHeartbeat(registration.session_token, intervalSec, markNeedsRegister); },
+        markNeedsRegister,
       );
 
       while (!this.stopped && !needsRegister) {
@@ -147,7 +148,7 @@ export class ConnectorRuntime {
     this.activeHeartbeat = undefined;
   }
 
-  private startWebSocketLoop(sessionToken: string, onConnected: () => void, onDisconnected: () => void): void {
+  private startWebSocketLoop(sessionToken: string, onConnected: () => void, onDisconnected: () => void, onSessionExpired: () => void): void {
     this.reconnectController = withReconnect(
       async () => {
         const transport = this.options.transportFactory?.() ?? new GatewayWebSocketTransport(this.config, this.logger);
@@ -175,6 +176,11 @@ export class ConnectorRuntime {
               this.stopped = true;
               this.stopHttpHeartbeat();
               this.logger.info("exiting", { reason: "connection_replaced" });
+              return false;
+            }
+            if (event.code === 4004) {
+              this.logger.info("session_expired, re-registering", { code: event.code });
+              onSessionExpired();
               return false;
             }
             onDisconnected();
