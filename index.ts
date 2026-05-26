@@ -43,11 +43,13 @@ export default defineChannelPluginEntry({
     const logger = new Logger("info");
     if (api.logger) {
       const apiLogger = api.logger;
+      const fmt = (message: string, fields?: Record<string, unknown>) =>
+        fields && Object.keys(fields).length ? `${message} ${JSON.stringify(fields)}` : message;
       Object.assign(logger, {
-        debug: (message: string) => apiLogger.debug(message),
-        info: (message: string) => apiLogger.info(message),
-        warn: (message: string) => apiLogger.warn(message),
-        error: (message: string) => apiLogger.error(message),
+        debug: (message: string, fields?: Record<string, unknown>) => apiLogger.debug(fmt(message, fields)),
+        info:  (message: string, fields?: Record<string, unknown>) => apiLogger.info(fmt(message, fields)),
+        warn:  (message: string, fields?: Record<string, unknown>) => apiLogger.warn(fmt(message, fields)),
+        error: (message: string, fields?: Record<string, unknown>) => apiLogger.error(fmt(message, fields)),
       });
     }
 
