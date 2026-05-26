@@ -1,5 +1,4 @@
-import { definePluginEntry } from "openclaw/plugin-sdk/core";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
+import { defineChannelPluginEntry, type ChannelPlugin, type OpenClawPluginApi } from "openclaw/plugin-sdk/core";
 import { setRuntime } from "./src/plugin-runtime.js";
 import { resolvePluginConfig } from "./src/plugin-config.js";
 import { configFromPlugin } from "./src/config.js";
@@ -9,14 +8,38 @@ import { InboundHandler } from "./src/inbound-handler.js";
 import { GatewayWebSocketTransport } from "./src/gateway-ws-client.js";
 import { Logger } from "./src/logger.js";
 
-export default definePluginEntry({
-  register(api: OpenClawPluginApi): void {
-    setRuntime(api.runtime);
+const uniagentgatePlugin: ChannelPlugin = {
+  id: "uniagentgate",
+  meta: {
+    id: "uniagentgate",
+    label: "uniAgentGate",
+    selectionLabel: "uniAgentGate (RCS + SIP Video)",
+    docsPath: "",
+    blurb: "Bridge OpenClaw conversations to uniAgentGate channel runtimes.",
+    order: 60,
+    aliases: ["uniagentgate", "uag"],
+  },
+  capabilities: {
+    chatTypes: ["dm"],
+  },
+  config: {
+    listAccountIds: () => ["default"],
+    resolveAccount: () => ({}),
+    isConfigured: () => true,
+    isEnabled: () => true,
+  },
+};
 
+export default defineChannelPluginEntry({
+  id: "uniagentgate",
+  name: "uniAgentGate",
+  description: "Bridges OpenClaw to uniAgentGate (5G RCS + SIP video calls).",
+  plugin: uniagentgatePlugin,
+  setRuntime,
+  registerFull: (api: OpenClawPluginApi): void => {
     const pluginConfig = resolvePluginConfig(api.pluginConfig);
     const config = configFromPlugin(pluginConfig);
 
-    // Bridge api.logger into a Logger instance
     const logger = new Logger("info");
     if (api.logger) {
       const apiLogger = api.logger;
@@ -28,7 +51,6 @@ export default definePluginEntry({
       });
     }
 
-    // Shared send reference — updated each time a new WS transport connects
     let currentSend: (m: object) => Promise<void> = async () => {
       logger.warn("agent.event dropped — transport not yet connected");
     };
@@ -55,10 +77,6 @@ export default definePluginEntry({
     void connectorRuntime.start().catch((err: unknown) => {
       logger.error("uniagentgate connector crashed", { error: String(err) });
     });
-  },
-
-  unregister(): void {
-    setRuntime(undefined);
   },
 });
 
