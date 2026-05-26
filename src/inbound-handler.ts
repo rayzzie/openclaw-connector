@@ -21,6 +21,7 @@ export class InboundHandler {
     private readonly rt: PluginRuntime,
     private readonly agentId: string,
     private readonly logger?: Logger,
+    private readonly cfg?: unknown,
   ) {}
 
   async handle(request: AgentRequest): Promise<void> {
@@ -93,6 +94,7 @@ export class InboundHandler {
 
       await this.rt.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
         ctx,
+        cfg: this.cfg,
         dispatcherOptions: {
           deliver: async (payload: { text?: string }) => {
             if (payload.text) {

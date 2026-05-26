@@ -4,6 +4,7 @@ declare module "openclaw/plugin-sdk/core" {
       reply: {
         dispatchReplyWithBufferedBlockDispatcher(options: {
           ctx: Record<string, unknown>;
+          cfg: unknown;
           dispatcherOptions: {
             deliver: (payload: { text?: string }) => Promise<void>;
           };
@@ -50,6 +51,7 @@ declare module "openclaw/plugin-sdk/core" {
   export interface OpenClawPluginApi {
     runtime: PluginRuntime;
     pluginConfig: unknown;
+    config: unknown;
     registrationMode?: string;
     logger?: {
       debug(msg: string, meta?: unknown): void;

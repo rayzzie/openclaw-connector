@@ -62,6 +62,7 @@ export default defineChannelPluginEntry({
       api.runtime,
       config.agentId,
       logger,
+      api.config,
     );
 
     const gatewayClient = makeGatewayClient(pluginConfig.gatewayUrl);
