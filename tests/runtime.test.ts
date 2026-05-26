@@ -100,6 +100,25 @@ describe("ConnectorRuntime", () => {
     expect(client.registerCalls).toBe(1);
   });
 
+  it("re-registers after session_expired (4004) close code", async () => {
+    const client = new FakeClient(
+      [registerResult("token_1"), errorResult(401, "done")],
+    );
+    // First WS closes with 4004 → triggers re-register; second register returns 401 → runtime exits
+    let callCount = 0;
+    const runtime = new ConnectorRuntime(config, client, new Logger("error"), {
+      sleep: async () => undefined,
+      transportFactory: () => {
+        callCount += 1;
+        return new ClosingTransport({ code: callCount === 1 ? 4004 : 1000, reason: "test" });
+      }
+    });
+
+    await runtime.start();
+
+    expect(client.registerCalls).toBe(2);
+  });
+
   it("accepts onAgentRequest and onAgentInterrupt in options", () => {
     const client = new FakeClient([]);
     const runtime = new ConnectorRuntime(config, client, new Logger("error"), {
