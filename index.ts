@@ -3,6 +3,9 @@ import { setRuntime } from "./src/plugin-runtime.js";
 import type { GatewayResult, RegisterRuntimeResponse, HeartbeatResponse, RegisterRuntimePayload, AgentLoad } from "./src/runtime.js";
 import { uniagentgateChannelPlugin } from "./src/channel.js";
 import { acquireRuntimeStart } from "./src/runtime-start-guard.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { join, dirname } from "node:path";
 
 export default defineChannelPluginEntry({
   id: "uniagentgate",
@@ -59,15 +62,16 @@ export default defineChannelPluginEntry({
       logger.warn("agent.event dropped — transport not yet connected");
     };
 
+    const localCfg = readLocalConfig();
     const desktopFrameProvider = createDesktopFrameProvider(
       {
-        provider: pluginConfig.desktopFrameProvider,
-        ttlMs: pluginConfig.desktopFrameTtlMs,
+        provider: localCfg.desktopFrameProvider ?? pluginConfig.desktopFrameProvider,
+        ttlMs: localCfg.desktopFrameTtlMs ?? pluginConfig.desktopFrameTtlMs,
       },
       logger,
     );
     const desktopFrameStreamOptions = {
-      fps: pluginConfig.desktopFrameFps,
+      fps: localCfg.desktopFrameFps ?? pluginConfig.desktopFrameFps,
     };
 
     const inboundHandler = new InboundHandler(
@@ -101,6 +105,34 @@ export default defineChannelPluginEntry({
       .finally(() => startLease.release());
   },
 });
+
+type LocalConfig = {
+  desktopFrameProvider?: "screen" | "fake";
+  desktopFrameFps?: number;
+  desktopFrameTtlMs?: number;
+};
+
+function readLocalConfig(): LocalConfig {
+  try {
+    // Resolve uag-connector.json relative to this file (dist/index.js → ../uag-connector.json)
+    const dir = dirname(fileURLToPath(import.meta.url));
+    const path = join(dir, "..", "uag-connector.json");
+    const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    const out: LocalConfig = {};
+    if (raw["desktopFrameProvider"] === "screen" || raw["desktopFrameProvider"] === "fake") {
+      out.desktopFrameProvider = raw["desktopFrameProvider"];
+    }
+    if (typeof raw["desktopFrameFps"] === "number" && raw["desktopFrameFps"] > 0) {
+      out.desktopFrameFps = raw["desktopFrameFps"];
+    }
+    if (typeof raw["desktopFrameTtlMs"] === "number" && raw["desktopFrameTtlMs"] > 0) {
+      out.desktopFrameTtlMs = raw["desktopFrameTtlMs"];
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 
 function makeGatewayClient(baseUrl: string) {
   const base = baseUrl.replace(/\/+$/, "");

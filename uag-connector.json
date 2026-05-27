@@ -1,0 +1,5 @@
+{
+  "desktopFrameProvider": "screen",
+  "desktopFrameFps": 1,
+  "desktopFrameTtlMs": 2000
+}
