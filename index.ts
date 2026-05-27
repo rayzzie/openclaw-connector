@@ -61,13 +61,13 @@ export default defineChannelPluginEntry({
 
     const desktopFrameProvider = createDesktopFrameProvider(
       {
-        provider: (process.env.UAG_DESKTOP_FRAME_PROVIDER ?? "fake") as "screen" | "fake",
-        ttlMs: parseEnvInt(process.env.UAG_DESKTOP_FRAME_TTL_MS, 2000),
+        provider: pluginConfig.desktopFrameProvider,
+        ttlMs: pluginConfig.desktopFrameTtlMs,
       },
       logger,
     );
     const desktopFrameStreamOptions = {
-      fps: parseEnvFloat(process.env.UAG_DESKTOP_FRAME_FPS, 1),
+      fps: pluginConfig.desktopFrameFps,
     };
 
     const inboundHandler = new InboundHandler(
@@ -101,18 +101,6 @@ export default defineChannelPluginEntry({
       .finally(() => startLease.release());
   },
 });
-
-function parseEnvInt(value: string | undefined, defaultValue: number): number {
-  if (!value) return defaultValue;
-  const n = parseInt(value, 10);
-  return Number.isFinite(n) && n > 0 ? n : defaultValue;
-}
-
-function parseEnvFloat(value: string | undefined, defaultValue: number): number {
-  if (!value) return defaultValue;
-  const n = parseFloat(value);
-  return Number.isFinite(n) && n > 0 ? n : defaultValue;
-}
 
 function makeGatewayClient(baseUrl: string) {
   const base = baseUrl.replace(/\/+$/, "");

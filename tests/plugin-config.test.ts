@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolvePluginConfig } from "../src/plugin-config.js";
+import { resolvePluginConfig, resolveRuntimePluginConfig } from "../src/plugin-config.js";
 
 describe("resolvePluginConfig", () => {
   it("parses valid config", () => {
@@ -37,5 +37,42 @@ describe("resolvePluginConfig", () => {
   it("throws on non-object input", () => {
     expect(() => resolvePluginConfig(null)).toThrow();
     expect(() => resolvePluginConfig("string")).toThrow();
+  });
+
+  it("resolves runtime config from channel config when plugin config is empty", () => {
+    const cfg = resolveRuntimePluginConfig(
+      {},
+      {
+        channels: {
+          uniagentgate: {
+            gatewayUrl: "http://localhost:18080/",
+            agentId: "agent:main",
+            agentSk: "uag_sk_channel",
+          },
+        },
+      },
+    );
+
+    expect(cfg).toMatchObject({
+      gatewayUrl: "http://localhost:18080",
+      agentId: "agent:main",
+      agentSk: "uag_sk_channel",
+      desktopFrameProvider: "fake",
+      desktopFrameFps: 1,
+      desktopFrameTtlMs: 2000,
+    });
+  });
+
+  it("keeps legacy plugin config as runtime fallback", () => {
+    const cfg = resolveRuntimePluginConfig(
+      {
+        gatewayUrl: "http://legacy:18080",
+        agentId: "agent:legacy",
+        agentSk: "uag_sk_legacy",
+      },
+      { channels: {} },
+    );
+
+    expect(cfg.agentId).toBe("agent:legacy");
   });
 });
