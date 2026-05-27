@@ -1,44 +1,40 @@
-import { defineChannelPluginEntry, type ChannelPlugin, type OpenClawPluginApi } from "openclaw/plugin-sdk/core";
+import { defineChannelPluginEntry, type OpenClawPluginApi } from "openclaw/plugin-sdk/core";
 import { setRuntime } from "./src/plugin-runtime.js";
-import { resolvePluginConfig } from "./src/plugin-config.js";
-import { configFromPlugin } from "./src/config.js";
-import { ConnectorRuntime } from "./src/runtime.js";
 import type { GatewayResult, RegisterRuntimeResponse, HeartbeatResponse, RegisterRuntimePayload, AgentLoad } from "./src/runtime.js";
-import { InboundHandler } from "./src/inbound-handler.js";
-import { GatewayWebSocketTransport } from "./src/gateway-ws-client.js";
-import { Logger } from "./src/logger.js";
-
-const uniagentgatePlugin: ChannelPlugin = {
-  id: "uniagentgate",
-  meta: {
-    id: "uniagentgate",
-    label: "uniAgentGate",
-    selectionLabel: "uniAgentGate (RCS + SIP Video)",
-    docsPath: "",
-    blurb: "Bridge OpenClaw conversations to uniAgentGate channel runtimes.",
-    order: 60,
-    aliases: ["uniagentgate", "uag"],
-  },
-  capabilities: {
-    chatTypes: ["dm"],
-  },
-  config: {
-    listAccountIds: () => ["default"],
-    resolveAccount: () => ({}),
-    isConfigured: () => true,
-    isEnabled: () => true,
-  },
-};
+import { uniagentgateChannelPlugin } from "./src/channel.js";
+import { acquireRuntimeStart } from "./src/runtime-start-guard.js";
 
 export default defineChannelPluginEntry({
   id: "uniagentgate",
   name: "uniAgentGate",
   description: "Bridges OpenClaw to uniAgentGate (5G RCS + SIP video calls).",
-  plugin: uniagentgatePlugin,
+  plugin: uniagentgateChannelPlugin,
   setRuntime,
-  registerFull: (api: OpenClawPluginApi): void => {
-    const pluginConfig = resolvePluginConfig(api.pluginConfig);
+  registerFull: async (api: OpenClawPluginApi): Promise<void> => {
+    if (process.env.UAG_OPENCLAW_INSTALL_ONLY === "1") {
+      api.logger?.info("uniagentgate install-only mode; skipping runtime start");
+      return;
+    }
+    const [
+      { resolveRuntimePluginConfig },
+      { configFromPlugin },
+      { ConnectorRuntime },
+      { InboundHandler },
+      { GatewayWebSocketTransport },
+      { Logger },
+      { createDesktopFrameProvider },
+    ] = await Promise.all([
+      import("./src/plugin-config.js"),
+      import("./src/config.js"),
+      import("./src/runtime.js"),
+      import("./src/inbound-handler.js"),
+      import("./src/gateway-ws-client.js"),
+      import("./src/logger.js"),
+      import("./src/desktop-frame-provider.js"),
+    ]);
+    const pluginConfig = resolveRuntimePluginConfig(api.pluginConfig, api.config);
     const config = configFromPlugin(pluginConfig);
+    const startLease = acquireRuntimeStart(`${config.gatewayBaseUrl}|${config.agentId}`);
 
     const logger = new Logger("info");
     if (api.logger) {
@@ -52,9 +48,26 @@ export default defineChannelPluginEntry({
         error: (message: string, fields?: Record<string, unknown>) => apiLogger.error(fmt(message, fields)),
       });
     }
+    if (!startLease.acquired) {
+      logger.info("uniagentgate connector already running; skipping duplicate runtime start", {
+        agent_id: config.agentId,
+      });
+      return;
+    }
 
     let currentSend: (m: object) => Promise<void> = async () => {
       logger.warn("agent.event dropped — transport not yet connected");
+    };
+
+    const desktopFrameProvider = createDesktopFrameProvider(
+      {
+        provider: (process.env.UAG_DESKTOP_FRAME_PROVIDER ?? "fake") as "screen" | "fake",
+        ttlMs: parseEnvInt(process.env.UAG_DESKTOP_FRAME_TTL_MS, 2000),
+      },
+      logger,
+    );
+    const desktopFrameStreamOptions = {
+      fps: parseEnvFloat(process.env.UAG_DESKTOP_FRAME_FPS, 1),
     };
 
     const inboundHandler = new InboundHandler(
@@ -63,6 +76,8 @@ export default defineChannelPluginEntry({
       config.agentId,
       logger,
       api.config,
+      desktopFrameProvider,
+      desktopFrameStreamOptions,
     );
 
     const gatewayClient = makeGatewayClient(pluginConfig.gatewayUrl);
@@ -75,13 +90,29 @@ export default defineChannelPluginEntry({
       },
       onAgentRequest: (msg) => inboundHandler.handle(msg),
       onAgentInterrupt: async (msg) => { inboundHandler.interrupt(msg); },
+      onChannelSessionStarted: (msg) => inboundHandler.handleSessionStarted(msg),
+      onChannelSessionEnded: (msg) => inboundHandler.handleSessionEnded(msg),
     });
 
-    void connectorRuntime.start().catch((err: unknown) => {
-      logger.error("uniagentgate connector crashed", { error: String(err) });
-    });
+    void connectorRuntime.start()
+      .catch((err: unknown) => {
+        logger.error("uniagentgate connector crashed", { error: String(err) });
+      })
+      .finally(() => startLease.release());
   },
 });
+
+function parseEnvInt(value: string | undefined, defaultValue: number): number {
+  if (!value) return defaultValue;
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n : defaultValue;
+}
+
+function parseEnvFloat(value: string | undefined, defaultValue: number): number {
+  if (!value) return defaultValue;
+  const n = parseFloat(value);
+  return Number.isFinite(n) && n > 0 ? n : defaultValue;
+}
 
 function makeGatewayClient(baseUrl: string) {
   const base = baseUrl.replace(/\/+$/, "");
