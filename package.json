@@ -41,7 +41,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "screenshot-desktop": "^1.15.0",
     "ws": "^8.18.0"
   },
   "peerDependencies": {

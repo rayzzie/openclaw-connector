@@ -1,14 +1,14 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, unlink, rmdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { DesktopFrameProvider, DesktopFrame } from "./desktop-frame-provider.js";
 import type { Logger } from "./logger.js";
-
-type ScreenshotFn = (opts?: { format?: string }) => Promise<Buffer>;
 
 export class ScreenDesktopFrameProvider implements DesktopFrameProvider {
   private readonly ttlMs: number;
   private readonly logger: Logger | undefined;
   private readonly fallback: DesktopFrameProvider | undefined;
-  // undefined = not yet attempted; null = load failed
-  private _fn: ScreenshotFn | null | undefined = undefined;
 
   constructor(options: { ttlMs?: number; logger?: Logger; fallback?: DesktopFrameProvider } = {}) {
     this.ttlMs = Math.max(500, options.ttlMs ?? 2000);
@@ -17,50 +17,50 @@ export class ScreenDesktopFrameProvider implements DesktopFrameProvider {
   }
 
   async capture(): Promise<DesktopFrame> {
-    const fn = await this._load();
-    if (fn) {
-      try {
-        const data = await fn({ format: "png" });
-        const { width, height } = readPngSize(data);
-        return {
-          surface: "desktop",
-          mimeType: "image/png",
-          data,
-          width,
-          height,
-          ttlMs: this.ttlMs,
-          timestampIso: new Date().toISOString(),
-        };
-      } catch (err) {
-        this.logger?.warn("screen capture failed, using fallback", {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
+    try {
+      const data = await macosScreencapture();
+      const { width, height } = readPngSize(data);
+      return {
+        surface: "desktop",
+        mimeType: "image/png",
+        data,
+        width,
+        height,
+        ttlMs: this.ttlMs,
+        timestampIso: new Date().toISOString(),
+      };
+    } catch (err) {
+      this.logger?.warn("screen capture failed, using fallback", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
     if (this.fallback) {
       return this.fallback.capture();
     }
     throw new Error("screen capture unavailable and no fallback configured");
   }
+}
 
-  private async _load(): Promise<ScreenshotFn | null> {
-    if (this._fn !== undefined) {
-      return this._fn;
-    }
-    try {
-      // screenshot-desktop is CJS; Node.js ESM dynamic import surfaces module.exports as default.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const mod = await import("screenshot-desktop") as any;
-      this._fn = (mod.default ?? mod) as ScreenshotFn;
-      this.logger?.info("screenshot-desktop loaded");
-    } catch (err) {
-      this.logger?.warn("screenshot-desktop unavailable, will use fallback", {
-        error: err instanceof Error ? err.message : String(err),
-      });
-      this._fn = null;
-    }
-    return this._fn;
+// Call /usr/sbin/screencapture with the full path to avoid PATH issues in
+// LaunchAgent environments where /usr/sbin may not be on PATH.
+async function macosScreencapture(): Promise<Buffer> {
+  const dir = await mkdtemp(join(tmpdir(), "uag-ss-"));
+  const file = join(dir, "s.png");
+  try {
+    await runCommand("/usr/sbin/screencapture", ["-x", "-t", "png", file]);
+    return await readFile(file);
+  } finally {
+    await unlink(file).catch(() => {});
+    await rmdir(dir).catch(() => {});
   }
+}
+
+function runCommand(cmd: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, (err) => {
+      if (err) reject(err); else resolve();
+    });
+  });
 }
 
 function readPngSize(buf: Buffer): { width: number; height: number } {

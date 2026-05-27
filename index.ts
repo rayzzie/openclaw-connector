@@ -63,6 +63,11 @@ export default defineChannelPluginEntry({
     };
 
     const localCfg = readLocalConfig();
+    logger.info("desktop frame config", {
+      source: localCfg.desktopFrameProvider ? "uag-connector.json" : "plugin-config",
+      provider: localCfg.desktopFrameProvider ?? pluginConfig.desktopFrameProvider,
+      fps: localCfg.desktopFrameFps ?? pluginConfig.desktopFrameFps,
+    });
     const desktopFrameProvider = createDesktopFrameProvider(
       {
         provider: localCfg.desktopFrameProvider ?? pluginConfig.desktopFrameProvider,
