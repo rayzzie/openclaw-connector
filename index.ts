@@ -72,6 +72,7 @@ export default defineChannelPluginEntry({
       {
         provider: localCfg.desktopFrameProvider ?? pluginConfig.desktopFrameProvider,
         ttlMs: localCfg.desktopFrameTtlMs ?? pluginConfig.desktopFrameTtlMs,
+        maxWidth: localCfg.desktopFrameMaxWidth,
       },
       logger,
     );
@@ -115,6 +116,7 @@ type LocalConfig = {
   desktopFrameProvider?: "screen" | "fake";
   desktopFrameFps?: number;
   desktopFrameTtlMs?: number;
+  desktopFrameMaxWidth?: number;
 };
 
 function readLocalConfig(): LocalConfig {
@@ -132,6 +134,9 @@ function readLocalConfig(): LocalConfig {
     }
     if (typeof raw["desktopFrameTtlMs"] === "number" && raw["desktopFrameTtlMs"] > 0) {
       out.desktopFrameTtlMs = raw["desktopFrameTtlMs"];
+    }
+    if (typeof raw["desktopFrameMaxWidth"] === "number" && raw["desktopFrameMaxWidth"] > 0) {
+      out.desktopFrameMaxWidth = raw["desktopFrameMaxWidth"];
     }
     return out;
   } catch {

@@ -221,6 +221,7 @@ const CRC_TABLE = buildCrcTable();
 export type DesktopFrameProviderConfig = {
   provider?: "screen" | "fake";
   ttlMs?: number;
+  maxWidth?: number;
 };
 
 export function createDesktopFrameProvider(
@@ -231,7 +232,7 @@ export function createDesktopFrameProvider(
   if (config.provider !== "screen") {
     return fake;
   }
-  return new ScreenDesktopFrameProvider({ ttlMs: config.ttlMs, logger, fallback: fake });
+  return new ScreenDesktopFrameProvider({ ttlMs: config.ttlMs, maxWidth: config.maxWidth, logger, fallback: fake });
 }
 
 const FONT: Record<string, Glyph> = {

@@ -1,5 +1,6 @@
 {
   "desktopFrameProvider": "screen",
   "desktopFrameFps": 1,
-  "desktopFrameTtlMs": 2000
+  "desktopFrameTtlMs": 2000,
+  "desktopFrameMaxWidth": 1920
 }

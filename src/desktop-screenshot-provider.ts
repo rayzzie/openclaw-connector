@@ -7,18 +7,25 @@ import type { Logger } from "./logger.js";
 
 export class ScreenDesktopFrameProvider implements DesktopFrameProvider {
   private readonly ttlMs: number;
+  private readonly maxWidth: number | undefined;
   private readonly logger: Logger | undefined;
   private readonly fallback: DesktopFrameProvider | undefined;
 
-  constructor(options: { ttlMs?: number; logger?: Logger; fallback?: DesktopFrameProvider } = {}) {
+  constructor(options: {
+    ttlMs?: number;
+    maxWidth?: number;
+    logger?: Logger;
+    fallback?: DesktopFrameProvider;
+  } = {}) {
     this.ttlMs = Math.max(500, options.ttlMs ?? 2000);
+    this.maxWidth = options.maxWidth;
     this.logger = options.logger;
     this.fallback = options.fallback;
   }
 
   async capture(): Promise<DesktopFrame> {
     try {
-      const data = await macosScreencapture();
+      const data = await macosScreencapture(this.maxWidth);
       const { width, height } = readPngSize(data);
       return {
         surface: "desktop",
@@ -41,13 +48,16 @@ export class ScreenDesktopFrameProvider implements DesktopFrameProvider {
   }
 }
 
-// Call /usr/sbin/screencapture with the full path to avoid PATH issues in
-// LaunchAgent environments where /usr/sbin may not be on PATH.
-async function macosScreencapture(): Promise<Buffer> {
+// Capture the screen using the full absolute path to avoid PATH issues in
+// LaunchAgent environments. Optionally resize to maxWidth using sips.
+async function macosScreencapture(maxWidth?: number): Promise<Buffer> {
   const dir = await mkdtemp(join(tmpdir(), "uag-ss-"));
   const file = join(dir, "s.png");
   try {
     await runCommand("/usr/sbin/screencapture", ["-x", "-t", "png", file]);
+    if (maxWidth && maxWidth > 0) {
+      await runCommand("/usr/bin/sips", ["--resampleWidth", String(maxWidth), file]);
+    }
     return await readFile(file);
   } finally {
     await unlink(file).catch(() => {});
