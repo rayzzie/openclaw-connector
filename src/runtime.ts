@@ -2,7 +2,7 @@ import type { ConnectorConfig } from "./config.js";
 import { AckTracker } from "./ack-tracker.js";
 import { DedupeCache } from "./dedupe-cache.js";
 import { EnvelopeRouter } from "./envelope-router.js";
-import type { AgentInterrupt, AgentRequest, Envelope } from "./protocol.js";
+import type { AgentInterrupt, AgentRequest, ChannelSessionEnded, ChannelSessionStarted, Envelope } from "./protocol.js";
 import { withReconnect, type ReconnectClose, type ReconnectController } from "./reconnect.js";
 import { GatewayWebSocketTransport, type WsCloseEvent } from "./gateway-ws-client.js";
 import type { Logger } from "./logger.js";
@@ -35,11 +35,18 @@ export type RuntimeGatewayClient = {
   heartbeat(sessionToken: string, agentId: string, load: AgentLoad): Promise<GatewayResult<HeartbeatResponse>>;
 };
 
+export type ConnectorStatusState = "connecting" | "online" | "degraded" | "error" | "stopped";
+
+export type ConnectorStatus = { state: ConnectorStatusState; detail?: string };
+
 export type RuntimeOptions = {
   sleep?: (ms: number) => Promise<void>;
   transportFactory?: () => RuntimeTransport;
   onAgentRequest?: (message: AgentRequest) => Promise<void>;
   onAgentInterrupt?: (message: AgentInterrupt) => Promise<void>;
+  onChannelSessionStarted?: (message: ChannelSessionStarted) => Promise<void>;
+  onChannelSessionEnded?: (message: ChannelSessionEnded) => Promise<void>;
+  onStatus?: (status: ConnectorStatus) => void;
 };
 
 export type RuntimeTransport = {
@@ -67,8 +74,12 @@ export class ConnectorRuntime {
 
   async start(): Promise<void> {
     while (!this.stopped) {
+      this.emitStatus("connecting");
       const registration = await this.registerWithRetry();
       if (!registration) {
+        if (!this.stopped) {
+          this.emitStatus("error", "registration_failed");
+        }
         return;
       }
 
@@ -80,8 +91,8 @@ export class ConnectorRuntime {
       this.startHttpHeartbeat(registration.session_token, intervalSec, markNeedsRegister);
       this.startWebSocketLoop(
         registration.session_token,
-        () => { this.stopHttpHeartbeat(); },
-        () => { this.startHttpHeartbeat(registration.session_token, intervalSec, markNeedsRegister); },
+        () => { this.stopHttpHeartbeat(); this.emitStatus("online"); },
+        () => { this.startHttpHeartbeat(registration.session_token, intervalSec, markNeedsRegister); this.emitStatus("degraded"); },
         markNeedsRegister,
       );
 
@@ -98,9 +109,14 @@ export class ConnectorRuntime {
       return;
     }
     this.stopped = true;
+    this.emitStatus("stopped", reason);
     this.logger.info("exiting", { reason });
     this.stopHttpHeartbeat();
     await this.reconnectController?.cancel();
+  }
+
+  private emitStatus(state: ConnectorStatusState, detail?: string): void {
+    this.options.onStatus?.({ state, detail });
   }
 
   private async registerWithRetry(): Promise<RegisterRuntimeResponse | undefined> {
@@ -159,6 +175,8 @@ export class ConnectorRuntime {
           dedupeCache: new DedupeCache(),
           onAgentRequest: this.options.onAgentRequest,
           onAgentInterrupt: this.options.onAgentInterrupt,
+          onChannelSessionStarted: this.options.onChannelSessionStarted,
+          onChannelSessionEnded: this.options.onChannelSessionEnded,
         });
         transport.onMessage((message: Envelope) => {
           void router.route(message);
@@ -175,6 +193,7 @@ export class ConnectorRuntime {
             if (event.code === 4003) {
               this.stopped = true;
               this.stopHttpHeartbeat();
+              this.emitStatus("stopped", "connection_replaced");
               this.logger.info("exiting", { reason: "connection_replaced" });
               return false;
             }

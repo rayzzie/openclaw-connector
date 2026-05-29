@@ -1,20 +1,33 @@
 import type { PluginRuntime } from "openclaw/plugin-sdk/core";
-import type { AgentInterrupt, AgentRequest } from "./protocol.js";
+import type { AgentInterrupt, AgentRequest, ChannelSessionEnded, ChannelSessionStarted } from "./protocol.js";
 import { buildSessionKey } from "./session-key.js";
 import { OutboundHandler, type OutboundTransport } from "./outbound-handler.js";
 import { newMessageId } from "./message-id.js";
 import type { Logger } from "./logger.js";
+import {
+  FakeDesktopFrameProvider,
+  desktopFrameToVisualPayload,
+  type DesktopFrameProvider,
+} from "./desktop-frame-provider.js";
 
 type RequestInput = {
   type?: string;
   text?: string;
   transcript?: string;
+  mime_type?: string;
+  data_base64?: string;
   image_url?: string;
   url?: string;
 };
 
+export type DesktopFrameStreamOptions = {
+  fps?: number;
+  intervalMs?: number;
+};
+
 export class InboundHandler {
   private readonly activeAborts = new Map<string, AbortController>();
+  private readonly activeDesktopStreams = new Map<string, DesktopStreamController>();
 
   constructor(
     private readonly transport: OutboundTransport,
@@ -22,6 +35,8 @@ export class InboundHandler {
     private readonly agentId: string,
     private readonly logger?: Logger,
     private readonly cfg?: unknown,
+    private readonly desktopFrameProvider: DesktopFrameProvider = new FakeDesktopFrameProvider(),
+    private readonly desktopFrameStreamOptions: DesktopFrameStreamOptions = {},
   ) {}
 
   async handle(request: AgentRequest): Promise<void> {
@@ -38,6 +53,7 @@ export class InboundHandler {
       stringValue(requestChannel?.external_session_id) ??
       "";
     const imageUrl = firstMediaUrl(inputs) ?? stringValue(metadata?.["file_url"]);
+    const inlineImage = firstInlineImage(inputs);
     const surface = stringValue(requestChannel?.type) ?? payloadChannel ?? "rcs";
 
     this.logger?.info("agent.request received", {
@@ -49,14 +65,18 @@ export class InboundHandler {
     });
 
     const responseId = newMessageId("resp");
-    const outbound = new OutboundHandler(this.transport, {
-      agentId: this.agentId,
-      sessionId: request.session_id,
-      turnId: request.turn_id,
-      requestId: request.request_id,
-      traceId: request.trace_id,
-      responseId,
-    });
+    const outbound = new OutboundHandler(
+      this.transport,
+      {
+        agentId: this.agentId,
+        sessionId: request.session_id,
+        turnId: request.turn_id,
+        requestId: request.request_id,
+        traceId: request.trace_id,
+        responseId,
+      },
+      this.logger,
+    );
 
     const abortController = new AbortController();
     this.activeAborts.set(request.turn_id, abortController);
@@ -81,6 +101,11 @@ export class InboundHandler {
     };
     if (imageUrl) {
       ctx["MediaPath"] = imageUrl;
+    }
+    if (inlineImage) {
+      ctx["MediaMimeType"] = inlineImage.mimeType;
+      ctx["MediaBase64"] = inlineImage.dataBase64;
+      ctx["MediaDataUrl"] = `data:${inlineImage.mimeType};base64,${inlineImage.dataBase64}`;
     }
 
     await outbound.sendStarted();
@@ -143,6 +168,137 @@ export class InboundHandler {
   interrupt(interrupt: AgentInterrupt): void {
     this.activeAborts.get(interrupt.turn_id)?.abort();
   }
+
+  async handleSessionStarted(message: ChannelSessionStarted): Promise<void> {
+    if (message.channel?.type !== "sip_video") {
+      return;
+    }
+    await this.activeDesktopStreams.get(message.session_id)?.stop(true);
+    const visualStream = message.payload.visual_stream;
+    const outbound = new OutboundHandler(
+      this.transport,
+      {
+        agentId: message.agent_id,
+        sessionId: message.session_id,
+        turnId: visualStream.turn_id,
+        requestId: visualStream.request_id,
+        traceId: message.trace_id,
+        responseId: visualStream.response_id,
+      },
+      this.logger,
+    );
+    const stream = this.startDefaultDesktopStream(message, outbound);
+    this.activeDesktopStreams.set(message.session_id, stream);
+  }
+
+  async handleSessionEnded(message: ChannelSessionEnded): Promise<void> {
+    const stream = this.activeDesktopStreams.get(message.session_id);
+    if (!stream) {
+      return;
+    }
+    this.activeDesktopStreams.delete(message.session_id);
+    await stream.stop(true);
+  }
+
+  private startDefaultDesktopStream(
+    message: ChannelSessionStarted,
+    outbound: OutboundHandler,
+  ): DesktopStreamController {
+    const controller = new AbortController();
+    const task = this.runDefaultDesktopStream(message, outbound, controller.signal);
+    return {
+      stop: async (sendCompleted = false) => {
+        controller.abort();
+        await task;
+        if (sendCompleted && !outbound.hasLostTransport) {
+          await outbound.sendCompleted();
+        }
+      },
+    };
+  }
+
+  private async runDefaultDesktopStream(
+    message: ChannelSessionStarted,
+    outbound: OutboundHandler,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const intervalMs = streamIntervalMs(this.desktopFrameStreamOptions);
+    let inFlight: Promise<void> | undefined;
+    try {
+      await outbound.sendVisualSurfaceSelect("desktop", "default_desktop_share");
+      while (!signal.aborted && !outbound.hasLostTransport) {
+        if (inFlight) {
+          // Previous frame is still capturing/sending on a slow transport.
+          // Skip this tick so frames never queue up behind a slow send and
+          // delay control-plane messages (output.delta) on the shared WS.
+          this.logger?.debug("desktop frame skipped — previous send in flight", {
+            session_id: message.session_id,
+          });
+        } else {
+          inFlight = this.captureAndSendFrame(message, outbound, signal).finally(() => {
+            inFlight = undefined;
+          });
+        }
+        await sleep(intervalMs, signal);
+      }
+      // Let the last in-flight frame finish so the caller's response.completed
+      // stays the final event on the stream.
+      await inFlight;
+    } catch (err) {
+      this.logger?.warn("desktop frame stream stopped", {
+        session_id: message.session_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  private async captureAndSendFrame(
+    message: ChannelSessionStarted,
+    outbound: OutboundHandler,
+    signal: AbortSignal,
+  ): Promise<void> {
+    try {
+      const frame = await this.desktopFrameProvider.capture();
+      if (signal.aborted || outbound.hasLostTransport) {
+        return;
+      }
+      await outbound.sendVisualFrame(desktopFrameToVisualPayload(frame));
+    } catch (err) {
+      this.logger?.warn("desktop frame capture/send failed", {
+        session_id: message.session_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+}
+
+type DesktopStreamController = {
+  stop(sendCompleted?: boolean): Promise<void>;
+};
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
+
+function streamIntervalMs(options: DesktopFrameStreamOptions): number {
+  if (options.intervalMs !== undefined) {
+    return Math.max(1, Math.floor(options.intervalMs));
+  }
+  const fps = Math.max(0.1, options.fps ?? 1);
+  return Math.max(1, Math.floor(1000 / fps));
 }
 
 function parseInputs(value: unknown): RequestInput[] {
@@ -153,6 +309,8 @@ function parseInputs(value: unknown): RequestInput[] {
     type: stringValue(item["type"]),
     text: stringValue(item["text"]),
     transcript: stringValue(item["transcript"]),
+    mime_type: stringValue(item["mime_type"]),
+    data_base64: stringValue(item["data_base64"]),
     image_url: stringValue(item["image_url"]),
     url: stringValue(item["url"]),
   }));
@@ -166,6 +324,15 @@ function firstText(inputs: RequestInput[]): string {
     }
   }
   return "";
+}
+
+function firstInlineImage(inputs: RequestInput[]): { mimeType: string; dataBase64: string } | undefined {
+  for (const input of inputs) {
+    if (input.type === "image" && input.data_base64 && input.mime_type) {
+      return { mimeType: input.mime_type, dataBase64: input.data_base64 };
+    }
+  }
+  return undefined;
 }
 
 function firstMediaUrl(inputs: RequestInput[]): string | undefined {

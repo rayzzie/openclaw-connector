@@ -40,11 +40,56 @@ declare module "openclaw/plugin-sdk/core" {
     [key: string]: unknown;
   };
 
+  export type ChannelStatusState = "connecting" | "online" | "degraded" | "error" | "stopped";
+
+  export type ChannelStatus = {
+    state: ChannelStatusState;
+    detail?: string;
+  };
+
+  export type ChannelLogger = {
+    debug(message: string, meta?: unknown): void;
+    info(message: string, meta?: unknown): void;
+    warn(message: string, meta?: unknown): void;
+    error(message: string, meta?: unknown): void;
+  };
+
+  export type GatewayStartContext<ResolvedAccount = unknown> = {
+    account: ResolvedAccount;
+    cfg: unknown;
+    log: ChannelLogger;
+    setStatus: (status: ChannelStatus) => void;
+    abortSignal: AbortSignal;
+    [key: string]: unknown;
+  };
+
+  export type GatewayStopContext<ResolvedAccount = unknown> = {
+    account: ResolvedAccount;
+    cfg: unknown;
+    log: ChannelLogger;
+    [key: string]: unknown;
+  };
+
+  export type GatewayStopResult = {
+    stop: () => void | Promise<void>;
+  };
+
+  export type ChannelGatewayAdapter<ResolvedAccount = unknown> = {
+    startAccount: (ctx: GatewayStartContext<ResolvedAccount>) => Promise<GatewayStopResult>;
+    stopAccount?: (ctx: GatewayStopContext<ResolvedAccount>) => Promise<void>;
+  };
+
   export type ChannelPlugin<ResolvedAccount = unknown> = {
     id: ChannelId;
     meta: ChannelMeta;
     capabilities: ChannelCapabilities;
+    setup?: {
+      resolveAccount: (cfg: unknown, accountId?: string | null) => ResolvedAccount;
+      inspectAccount?: (cfg: unknown, accountId?: string | null) => unknown;
+      [key: string]: unknown;
+    };
     config: ChannelConfigAdapter<ResolvedAccount>;
+    gateway?: ChannelGatewayAdapter<ResolvedAccount>;
     [key: string]: unknown;
   };
 
@@ -76,4 +121,24 @@ declare module "openclaw/plugin-sdk/core" {
     registerFull?: (api: OpenClawPluginApi) => void | Promise<void>;
     registerCliMetadata?: (api: OpenClawPluginApi) => void;
   }): unknown;
+
+  export function defineSetupPluginEntry<TPlugin>(plugin: TPlugin): unknown;
+}
+
+declare module "openclaw/plugin-sdk/channel-core" {
+  import type { ChannelPlugin, OpenClawPluginApi } from "openclaw/plugin-sdk/core";
+
+  export type { ChannelPlugin, OpenClawPluginApi };
+
+  export function defineChannelPluginEntry<TPlugin>(options: {
+    id: string;
+    name: string;
+    description?: string;
+    plugin: TPlugin;
+    setRuntime?: (runtime: OpenClawPluginApi["runtime"]) => void;
+    registerFull?: (api: OpenClawPluginApi) => void | Promise<void>;
+    registerCliMetadata?: (api: OpenClawPluginApi) => void;
+  }): unknown;
+
+  export function defineSetupPluginEntry<TPlugin>(plugin: TPlugin): unknown;
 }

@@ -129,6 +129,53 @@ describe("ConnectorRuntime", () => {
     // Just verifies the constructor accepts these options without error
     expect(runtime).toBeDefined();
   });
+
+  it("emits connecting first and error when registration is abandoned", async () => {
+    const client = new FakeClient([
+      errorResult(503, "unavailable"),
+      errorResult(503, "unavailable"),
+      errorResult(503, "unavailable"),
+    ]);
+    const states: string[] = [];
+    const runtime = new ConnectorRuntime(config, client, new Logger("error"), {
+      sleep: async () => undefined,
+      onStatus: (s) => states.push(s.state),
+    });
+
+    await runtime.start();
+
+    expect(states[0]).toBe("connecting");
+    expect(states.at(-1)).toBe("error");
+  });
+
+  it("emits online once the websocket connects", async () => {
+    const client = new FakeClient([registerResult("token_1"), errorResult(401, "done")]);
+    const states: string[] = [];
+    let call = 0;
+    const runtime = new ConnectorRuntime(config, client, new Logger("error"), {
+      sleep: async () => undefined,
+      transportFactory: () => new ClosingTransport({ code: call++ === 0 ? 4004 : 1000, reason: "x" }),
+      onStatus: (s) => states.push(s.state),
+    });
+
+    await runtime.start();
+
+    expect(states).toContain("online");
+  });
+
+  it("emits stopped on connection_replaced (4003)", async () => {
+    const client = new FakeClient([registerResult("token_1")]);
+    const states: string[] = [];
+    const runtime = new ConnectorRuntime(config, client, new Logger("error"), {
+      sleep: async () => undefined,
+      transportFactory: () => new ClosingTransport({ code: 4003, reason: "connection_replaced" }),
+      onStatus: (s) => states.push(s.state),
+    });
+
+    await runtime.start();
+
+    expect(states).toContain("stopped");
+  });
 });
 
 class FakeClient implements RuntimeGatewayClient {
