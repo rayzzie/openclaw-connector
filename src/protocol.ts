@@ -128,6 +128,35 @@ export type AgentError = EnvelopeBase & {
   };
 };
 
+export type VisualStreamContext = {
+  turn_id: string;
+  request_id: string;
+  response_id: string;
+};
+
+export type ChannelSessionStarted = EnvelopeBase & {
+  type: "channel.session.started";
+  agent_id: string;
+  session_id: string;
+  trace_id: string;
+  channel?: ChannelInfo;
+  payload: {
+    call_id?: string;
+    media?: Record<string, unknown>;
+    visual_stream: VisualStreamContext;
+  };
+};
+
+export type ChannelSessionEnded = EnvelopeBase & {
+  type: "channel.session.ended";
+  agent_id: string;
+  session_id: string;
+  trace_id: string;
+  payload: {
+    reason?: string;
+  };
+};
+
 export type VisualSurfaceSelectPayload = {
   type: "visual.surface.select";
   surface: string;
@@ -169,6 +198,8 @@ export type Envelope =
   | AgentResponse
   | AgentInterrupt
   | AgentError
+  | ChannelSessionStarted
+  | ChannelSessionEnded
   | EnvelopeBase;
 
 export type ValidationResult<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -325,6 +356,34 @@ export function validateAgentInterrupt(value: unknown): ValidationResult<AgentIn
     "session_id",
     "turn_id",
     "request_id",
+    "trace_id"
+  ]);
+}
+
+export function validateChannelSessionStarted(value: unknown): ValidationResult<ChannelSessionStarted> {
+  const result = validateBusinessEnvelope<ChannelSessionStarted>(value, "channel.session.started", [
+    "agent_id",
+    "session_id",
+    "trace_id"
+  ]);
+  if (!result.ok) {
+    return result;
+  }
+  const visualStream = result.value.payload.visual_stream;
+  if (!isRecord(visualStream)) {
+    return fail("channel.session.started payload.visual_stream is required");
+  }
+  const required = requiredStringFields(visualStream, ["turn_id", "request_id", "response_id"]);
+  if (!required.ok) {
+    return required;
+  }
+  return result;
+}
+
+export function validateChannelSessionEnded(value: unknown): ValidationResult<ChannelSessionEnded> {
+  return validateBusinessEnvelope<ChannelSessionEnded>(value, "channel.session.ended", [
+    "agent_id",
+    "session_id",
     "trace_id"
   ]);
 }

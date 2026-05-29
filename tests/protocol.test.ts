@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   validateAgentRequest,
+  validateChannelSessionEnded,
+  validateChannelSessionStarted,
   validateConnectionAccepted,
   validateEnvelope,
   validateHeartbeatMessage,
@@ -46,6 +48,44 @@ describe("protocol validation", () => {
       request_id: "req_001",
       trace_id: "trace_001",
       payload: {}
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("validates channel.session.started required fields and visual stream context", () => {
+    const result = validateChannelSessionStarted({
+      protocol_version: "uag.agent.v1",
+      type: "channel.session.started",
+      message_id: "msg_session_start_001",
+      timestamp: "2026-05-27T10:00:00Z",
+      agent_id: "agent_001",
+      session_id: "sip.call_001",
+      trace_id: "trace_call_001",
+      channel: { type: "sip_video", phone_number: "+8618501206838" },
+      payload: {
+        call_id: "call_001",
+        visual_stream: {
+          turn_id: "turn_session_visual",
+          request_id: "req_session_visual",
+          response_id: "resp_session_visual",
+        },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("validates channel.session.ended required fields", () => {
+    const result = validateChannelSessionEnded({
+      protocol_version: "uag.agent.v1",
+      type: "channel.session.ended",
+      message_id: "msg_session_end_001",
+      timestamp: "2026-05-27T10:01:00Z",
+      agent_id: "agent_001",
+      session_id: "sip.call_001",
+      trace_id: "trace_call_001",
+      payload: { reason: "bye" },
     });
 
     expect(result.ok).toBe(true);

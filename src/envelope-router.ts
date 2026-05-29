@@ -1,8 +1,13 @@
 import type { AckTracker } from "./ack-tracker.js";
 import type { DedupeCache } from "./dedupe-cache.js";
 import { newMessageId } from "./message-id.js";
-import type { AgentInterrupt, AgentRequest, Envelope } from "./protocol.js";
-import { validateAgentInterrupt, validateAgentRequest } from "./protocol.js";
+import type { AgentInterrupt, AgentRequest, ChannelSessionEnded, ChannelSessionStarted, Envelope } from "./protocol.js";
+import {
+  validateAgentInterrupt,
+  validateAgentRequest,
+  validateChannelSessionEnded,
+  validateChannelSessionStarted,
+} from "./protocol.js";
 
 export type RouterTransport = {
   send(message: object): Promise<void>;
@@ -15,6 +20,8 @@ export type EnvelopeRouterOptions = {
   dedupeCache: DedupeCache;
   onAgentRequest?: (message: AgentRequest) => Promise<void>;
   onAgentInterrupt?: (message: AgentInterrupt) => Promise<void>;
+  onChannelSessionStarted?: (message: ChannelSessionStarted) => Promise<void>;
+  onChannelSessionEnded?: (message: ChannelSessionEnded) => Promise<void>;
   dropAgentRequestAck?: boolean;
 };
 
@@ -47,6 +54,14 @@ export class EnvelopeRouter {
     }
     if (message.type === "agent.interrupt") {
       await this.routeAgentInterrupt(message);
+      return;
+    }
+    if (message.type === "channel.session.started") {
+      await this.routeChannelSessionStarted(message);
+      return;
+    }
+    if (message.type === "channel.session.ended") {
+      await this.routeChannelSessionEnded(message);
       return;
     }
     await this.protocolError("unknown_type", message.message_id);
@@ -88,6 +103,44 @@ export class EnvelopeRouter {
       this.options.dedupeCache.add(validated.value.message_id, ack);
     }
     await this.options.onAgentInterrupt?.(validated.value as AgentInterrupt);
+  }
+
+  private async routeChannelSessionStarted(message: Partial<Envelope>): Promise<void> {
+    const validated = validateChannelSessionStarted(message);
+    if (!validated.ok) {
+      await this.protocolError(validated.error, message.message_id);
+      return;
+    }
+    const ack = this.ackFor(validated.value.message_id);
+    const cachedAck = this.options.dedupeCache.get(validated.value.message_id);
+    if (cachedAck) {
+      await this.options.transport.send(cachedAck);
+      return;
+    }
+    if (validated.value.ack?.mode === "required") {
+      await this.options.transport.send(ack);
+      this.options.dedupeCache.add(validated.value.message_id, ack);
+    }
+    await this.options.onChannelSessionStarted?.(validated.value);
+  }
+
+  private async routeChannelSessionEnded(message: Partial<Envelope>): Promise<void> {
+    const validated = validateChannelSessionEnded(message);
+    if (!validated.ok) {
+      await this.protocolError(validated.error, message.message_id);
+      return;
+    }
+    const ack = this.ackFor(validated.value.message_id);
+    const cachedAck = this.options.dedupeCache.get(validated.value.message_id);
+    if (cachedAck) {
+      await this.options.transport.send(cachedAck);
+      return;
+    }
+    if (validated.value.ack?.mode === "required") {
+      await this.options.transport.send(ack);
+      this.options.dedupeCache.add(validated.value.message_id, ack);
+    }
+    await this.options.onChannelSessionEnded?.(validated.value);
   }
 
   private async protocolError(code: string, inReplyTo?: string): Promise<void> {
