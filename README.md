@@ -21,6 +21,11 @@ npm test
 npm run dev
 ```
 
+## 安装与管理员文档
+
+- 用户安装 channel：`docs/USER_CHANNEL_INSTALL.md`
+- 管理员签发 Agent / 绑定手机号：`docs/ADMIN_AGENT_PROVISIONING.md`
+
 ## Mock Modes
 
 Set `MOCK_MODE` before starting the connector:

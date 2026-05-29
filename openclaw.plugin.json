@@ -1,5 +1,7 @@
 {
   "id": "uniagentgate",
+  "kind": "channel",
+  "channels": ["uniagentgate"],
   "name": "uniAgentGate",
   "description": "Bridges OpenClaw to uniAgentGate (5G RCS + SIP video calls).",
   "activation": { "onStartup": true },
@@ -9,17 +11,55 @@
     "properties": {
       "gatewayUrl": {
         "type": "string",
-        "description": "Base URL of uniAgentGate, e.g. http://host:18080"
+        "description": "Legacy fallback. Prefer channels.uniagentgate.gatewayUrl."
       },
       "agentId": {
         "type": "string",
-        "description": "Agent ID registered in uniAgentGate"
+        "description": "Legacy fallback. Prefer channels.uniagentgate.agentId."
       },
       "agentSk": {
         "type": "string",
-        "description": "Agent secret key (uag_sk_…)"
+        "description": "Legacy fallback. Prefer channels.uniagentgate.agentSk."
       }
-    },
-    "required": ["gatewayUrl", "agentId", "agentSk"]
+    }
+  },
+  "channelConfigs": {
+    "uniagentgate": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Enable the uniAgentGate channel connector"
+          },
+          "gatewayUrl": {
+            "type": "string",
+            "description": "Base URL of uniAgentGate, e.g. http://host:18080"
+          },
+          "agentId": {
+            "type": "string",
+            "description": "Agent ID registered in uniAgentGate"
+          },
+          "agentSk": {
+            "type": "string",
+            "description": "Agent secret key (uag_sk_…)"
+          }
+        },
+        "required": ["gatewayUrl", "agentId", "agentSk"]
+      },
+      "uiHints": {
+        "gatewayUrl": {
+          "label": "uniAgentGate URL"
+        },
+        "agentId": {
+          "label": "Agent ID"
+        },
+        "agentSk": {
+          "label": "Agent secret key",
+          "sensitive": true
+        }
+      }
+    }
   }
 }
