@@ -2,6 +2,11 @@ import type { PluginRuntime } from "openclaw/plugin-sdk/core";
 import type { AgentInterrupt, AgentRequest, ChannelSessionEnded, ChannelSessionStarted } from "./protocol.js";
 import { buildSessionKey } from "./session-key.js";
 import { OutboundHandler, type OutboundTransport } from "./outbound-handler.js";
+import {
+  detectMediaKind,
+  resolveOutboundMediaUrls,
+  type OutboundReplyPayload,
+} from "./outbound-reply-payload.js";
 import { newMessageId } from "./message-id.js";
 import type { Logger } from "./logger.js";
 import {
@@ -121,7 +126,19 @@ export class InboundHandler {
         ctx,
         cfg: this.cfg,
         dispatcherOptions: {
-          deliver: async (payload: { text?: string }) => {
+          deliver: async (payload: OutboundReplyPayload) => {
+            // Rich media first: forward each URL as a media.play event so the
+            // gateway can stream it onto the call's WebRTC downlink. Only the
+            // URL reference crosses the wire — never the media bytes.
+            const mediaUrls = resolveOutboundMediaUrls(payload);
+            for (const url of mediaUrls) {
+              const kind = detectMediaKind(url);
+              this.logger?.debug("deliver media", {
+                request_id: request.request_id,
+                kind,
+              });
+              await outbound.sendMediaPlay(url, kind);
+            }
             if (payload.text) {
               deltaCount += 1;
               this.logger?.debug("deliver called", {
@@ -130,7 +147,7 @@ export class InboundHandler {
                 delta_seq: deltaCount,
               });
               await outbound.sendDelta(payload.text);
-            } else {
+            } else if (mediaUrls.length === 0) {
               this.logger?.warn("deliver_empty", { request_id: request.request_id });
             }
           },

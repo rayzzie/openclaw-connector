@@ -6,7 +6,12 @@ declare module "openclaw/plugin-sdk/core" {
           ctx: Record<string, unknown>;
           cfg: unknown;
           dispatcherOptions: {
-            deliver: (payload: { text?: string }) => Promise<void>;
+            deliver: (payload: {
+              text?: string;
+              mediaUrls?: string[];
+              mediaUrl?: string;
+              replyToId?: string;
+            }) => Promise<void>;
           };
           signal?: AbortSignal;
         }): Promise<void>;

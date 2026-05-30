@@ -1,6 +1,7 @@
 import type { Logger } from "./logger.js";
 import { newMessageId } from "./message-id.js";
 import type { VisualFramePayload } from "./protocol.js";
+import type { MediaKind } from "./outbound-reply-payload.js";
 
 export type OutboundTransport = {
   send(message: object): Promise<void>;
@@ -53,6 +54,15 @@ export class OutboundHandler {
   async sendVisualFrame(payload: VisualFramePayload): Promise<void> {
     const { type, ...extra } = payload;
     await this.sendEvent(type, extra);
+  }
+
+  /**
+   * Tell the gateway to play a piece of rich media on the call's WebRTC
+   * downlink. Only the URL reference crosses the wire — the gateway streams
+   * and decodes it; raw media bytes are never sent through this channel.
+   */
+  async sendMediaPlay(url: string, kind: MediaKind, loop = false): Promise<void> {
+    await this.sendEvent("media.play", { kind, url, loop });
   }
 
   get hasLostTransport(): boolean {

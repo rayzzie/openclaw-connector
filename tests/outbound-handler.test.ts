@@ -109,6 +109,24 @@ describe("OutboundHandler", () => {
     });
   });
 
+  it("sendMediaPlay sends a media.play event carrying only the url (no bytes)", async () => {
+    const { handler, sent } = makeHandler();
+    await handler.sendStarted();
+    await handler.sendMediaPlay("https://oss.example.com/clip.mp4", "video");
+
+    expect(sent).toHaveLength(2);
+    const msg = sent[1] as Msg;
+    expect(msg["type"]).toBe("agent.event");
+    expect(msg["sequence"]).toBe(2);
+    const payload = msg["payload"] as Payload;
+    expect(payload["type"]).toBe("media.play");
+    expect(payload["kind"]).toBe("video");
+    expect(payload["url"]).toBe("https://oss.example.com/clip.mp4");
+    // never carry raw bytes over the wire
+    expect(payload["data_base64"]).toBeUndefined();
+    expect(payload["bytes"]).toBeUndefined();
+  });
+
   it("sequence is monotonically increasing across all send* calls", async () => {
     const { handler, sent } = makeHandler();
     await handler.sendStarted();

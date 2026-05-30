@@ -266,6 +266,76 @@ describe("InboundHandler", () => {
     expect(deltaPayload["text"]).toBe("real");
   });
 
+  it("emits media.play (url-only) for outbound media blocks, then the text delta", async () => {
+    const sent: object[] = [];
+    const transport = { send: async (m: object) => { sent.push(m); } };
+
+    const rt = {
+      channel: {
+        reply: {
+          dispatchReplyWithBufferedBlockDispatcher: vi.fn(
+            async ({ dispatcherOptions }: { dispatcherOptions: { deliver: (p: Record<string, unknown>) => Promise<void> } }) => {
+              await dispatcherOptions.deliver({
+                text: "看这张图",
+                mediaUrl: "https://oss.example.com/cat.png",
+              });
+            }
+          ),
+        },
+      },
+    } as unknown as PluginRuntime;
+
+    const handler = new InboundHandler(transport, rt, "agent:main");
+    await handler.handle(makeRequest());
+
+    const payloads = sent.map(
+      (m) => (m as Record<string, unknown>)["payload"] as Record<string, unknown>,
+    );
+    const types = payloads.map((p) => p["type"]);
+    expect(types).toEqual(["response.started", "media.play", "output.delta", "response.completed"]);
+
+    const media = payloads[1];
+    expect(media["kind"]).toBe("image");
+    expect(media["url"]).toBe("https://oss.example.com/cat.png");
+    expect(media["data_base64"]).toBeUndefined(); // never any bytes
+
+    expect(payloads[2]["text"]).toBe("看这张图");
+  });
+
+  it("emits one media.play per url in mediaUrls, with kind inferred per url", async () => {
+    const sent: object[] = [];
+    const transport = { send: async (m: object) => { sent.push(m); } };
+
+    const rt = {
+      channel: {
+        reply: {
+          dispatchReplyWithBufferedBlockDispatcher: vi.fn(
+            async ({ dispatcherOptions }: { dispatcherOptions: { deliver: (p: Record<string, unknown>) => Promise<void> } }) => {
+              await dispatcherOptions.deliver({
+                mediaUrls: ["https://a/song.mp3", "https://a/clip.mp4"],
+              });
+            }
+          ),
+        },
+      },
+    } as unknown as PluginRuntime;
+
+    const handler = new InboundHandler(transport, rt, "agent:main");
+    await handler.handle(makeRequest());
+
+    const payloads = sent.map(
+      (m) => (m as Record<string, unknown>)["payload"] as Record<string, unknown>,
+    );
+    expect(payloads.map((p) => p["type"])).toEqual([
+      "response.started",
+      "media.play",
+      "media.play",
+      "response.completed",
+    ]);
+    expect(payloads[1]).toMatchObject({ kind: "audio", url: "https://a/song.mp3" });
+    expect(payloads[2]).toMatchObject({ kind: "video", url: "https://a/clip.mp4" });
+  });
+
   it("streams default fake desktop frames between session started and ended", async () => {
     const sent: object[] = [];
     const transport = { send: async (m: object) => { sent.push(m); } };
