@@ -16,10 +16,17 @@ describe("publicUrlFor", () => {
     );
   });
 
-  it("uses an explicit publicBaseUrl when set", () => {
-    expect(publicUrlFor({ ...baseCfg, publicBaseUrl: "https://cdn.example.com/" }, "media/abc.png")).toBe(
-      "https://cdn.example.com/media/abc.png",
+  it("builds a virtual-hosted url (bucket as subdomain) when urlStyle=virtual", () => {
+    // 联通云 OSS serves public read on the virtual-hosted domain.
+    expect(publicUrlFor({ ...baseCfg, urlStyle: "virtual" }, "media/abc.png")).toBe(
+      "http://ruanyanyuan-temp.obs-nmhhht6.cucloud.cn/media/abc.png",
     );
+  });
+
+  it("uses an explicit publicBaseUrl when set (overrides urlStyle)", () => {
+    expect(
+      publicUrlFor({ ...baseCfg, urlStyle: "virtual", publicBaseUrl: "https://cdn.example.com/" }, "media/abc.png"),
+    ).toBe("https://cdn.example.com/media/abc.png");
   });
 
   it("normalizes slashes", () => {

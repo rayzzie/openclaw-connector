@@ -14,8 +14,14 @@ export type S3UploaderConfig = {
   accessKeyId: string;
   secretAccessKey: string;
   sessionToken?: string;
-  /** Override the public read base; defaults to path-style `${endpoint}/${bucket}`. */
+  /** Override the public read base entirely (e.g. a CDN). Wins over urlStyle. */
   publicBaseUrl?: string;
+  /**
+   * Public-read URL layout. "path" → `${endpoint}/${bucket}/${key}` (generic
+   * S3/MinIO default); "virtual" → `${scheme}://${bucket}.${host}/${key}`
+   * (联通云 OSS serves public read on the virtual-hosted domain).
+   */
+  urlStyle?: "path" | "virtual";
   /** Object key prefix (default "media"). */
   keyPrefix?: string;
 };
@@ -34,10 +40,18 @@ const stripLeadingSlash = (s: string): string => s.replace(/^\/+/, "");
 
 /** Public read URL for an object key (path-style by default). */
 export function publicUrlFor(config: S3UploaderConfig, key: string): string {
-  const base = config.publicBaseUrl
-    ? stripTrailingSlash(config.publicBaseUrl)
-    : `${stripTrailingSlash(config.endpoint)}/${config.bucket}`;
-  return `${base}/${stripLeadingSlash(key)}`;
+  const k = stripLeadingSlash(key);
+  if (config.publicBaseUrl) {
+    return `${stripTrailingSlash(config.publicBaseUrl)}/${k}`;
+  }
+  if (config.urlStyle === "virtual") {
+    const ep = stripTrailingSlash(config.endpoint);
+    const sep = ep.indexOf("://");
+    const scheme = sep >= 0 ? ep.slice(0, sep) : "http";
+    const host = sep >= 0 ? ep.slice(sep + 3) : ep;
+    return `${scheme}://${config.bucket}.${host}/${k}`;
+  }
+  return `${stripTrailingSlash(config.endpoint)}/${config.bucket}/${k}`;
 }
 
 /**

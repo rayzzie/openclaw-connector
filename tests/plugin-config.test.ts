@@ -66,7 +66,24 @@ describe("resolvePluginConfig", () => {
       accessKeyId: "AK",
       secretAccessKey: "SK",
       region: "us-east-1",
+      urlStyle: "path", // default
     });
+  });
+
+  it("parses urlStyle=virtual for 联通云 OSS public read", () => {
+    const cfg = resolvePluginConfig({
+      gatewayUrl: "http://x",
+      agentId: "a",
+      agentSk: "s",
+      oss: {
+        endpoint: "http://obs-nmhhht6.cucloud.cn",
+        bucket: "ruanyanyuan-temp",
+        accessKeyId: "AK",
+        secretAccessKey: "SK",
+        urlStyle: "virtual",
+      },
+    });
+    expect(cfg.oss?.urlStyle).toBe("virtual");
   });
 
   it("ignores an incomplete oss block (missing keys → undefined)", () => {

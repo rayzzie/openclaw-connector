@@ -59,6 +59,7 @@ function readOssConfig(value: unknown): S3UploaderConfig | undefined {
     region: readString(value["region"]) ?? "us-east-1",
     sessionToken: readString(value["sessionToken"]),
     publicBaseUrl: readString(value["publicBaseUrl"]),
+    urlStyle: value["urlStyle"] === "virtual" ? "virtual" : "path",
     keyPrefix: readString(value["keyPrefix"]),
   };
 }
