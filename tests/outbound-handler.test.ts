@@ -80,35 +80,6 @@ describe("OutboundHandler", () => {
     expect(typeof (payload["error"] as Payload)["message"]).toBe("string");
   });
 
-  it("sends visual surface selection and visual frame events", async () => {
-    const { handler, sent } = makeHandler();
-    await handler.sendStarted();
-    await handler.sendVisualSurfaceSelect("desktop", "default_desktop_share");
-    await handler.sendVisualFrame({
-      type: "visual.frame",
-      surface: "desktop",
-      mime_type: "image/png",
-      data_base64: "ZmFrZQ==",
-      ttl_ms: 2000,
-    });
-
-    expect(sent).toHaveLength(3);
-    expect((sent[1] as Msg)["sequence"]).toBe(2);
-    expect((sent[2] as Msg)["sequence"]).toBe(3);
-    expect((sent[1] as Msg)["payload"]).toMatchObject({
-      type: "visual.surface.select",
-      surface: "desktop",
-      reason: "default_desktop_share",
-    });
-    expect((sent[2] as Msg)["payload"]).toMatchObject({
-      type: "visual.frame",
-      surface: "desktop",
-      mime_type: "image/png",
-      data_base64: "ZmFrZQ==",
-      ttl_ms: 2000,
-    });
-  });
-
   it("sendMediaPlay sends a media.play event carrying only the url (no bytes)", async () => {
     const { handler, sent } = makeHandler();
     await handler.sendStarted();

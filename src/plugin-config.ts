@@ -4,9 +4,6 @@ export type PluginConfig = {
   gatewayUrl: string;
   agentId: string;
   agentSk: string;
-  desktopFrameProvider: "screen" | "fake";
-  desktopFrameFps: number;
-  desktopFrameTtlMs: number;
   /** S3-compatible object store for uploading non-remote outbound media. */
   oss?: S3UploaderConfig;
 };
@@ -32,9 +29,6 @@ export function resolvePluginConfig(raw: unknown): PluginConfig {
     gatewayUrl: gatewayUrl.replace(/\/+$/, ""),
     agentId,
     agentSk,
-    desktopFrameProvider: readDesktopFrameProvider(obj["desktopFrameProvider"]),
-    desktopFrameFps: readPositiveNumber(obj["desktopFrameFps"], 1),
-    desktopFrameTtlMs: readPositiveNumber(obj["desktopFrameTtlMs"], 2000),
     oss: readOssConfig(obj["oss"]),
   };
 }
@@ -100,21 +94,6 @@ function hasPluginConfig(value: unknown): boolean {
     typeof value["agentSk"] === "string" &&
     value["agentSk"].length > 0
   );
-}
-
-function readDesktopFrameProvider(value: unknown): "screen" | "fake" {
-  return value === "screen" ? "screen" : "fake";
-}
-
-function readPositiveNumber(value: unknown, defaultValue: number): number {
-  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-    return value;
-  }
-  if (typeof value === "string") {
-    const n = parseFloat(value);
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-  return defaultValue;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

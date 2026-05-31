@@ -114,9 +114,6 @@ describe("resolvePluginConfig", () => {
       gatewayUrl: "http://localhost:18080",
       agentId: "agent:main",
       agentSk: "uag_sk_channel",
-      desktopFrameProvider: "fake",
-      desktopFrameFps: 1,
-      desktopFrameTtlMs: 2000,
     });
   });
 

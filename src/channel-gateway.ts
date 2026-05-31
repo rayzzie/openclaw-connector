@@ -1,10 +1,5 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-
 import type { PluginRuntime } from "openclaw/plugin-sdk/core";
 import { configFromPlugin } from "./config.js";
-import { createDesktopFrameProvider } from "./desktop-frame-provider.js";
 import { GatewayWebSocketTransport } from "./gateway-ws-client.js";
 import { makeGatewayClient } from "./gateway-http-client.js";
 import { InboundHandler } from "./inbound-handler.js";
@@ -81,24 +76,6 @@ export function startConnectorRuntime(input: ConnectorStartInput): ConnectorHand
     logger.warn("agent.event dropped — transport not yet connected");
   };
 
-  const localCfg = readLocalConfig();
-  logger.info("desktop frame config", {
-    source: localCfg.desktopFrameProvider ? "uag-connector.json" : "plugin-config",
-    provider: localCfg.desktopFrameProvider ?? resolved.desktopFrameProvider,
-    fps: localCfg.desktopFrameFps ?? resolved.desktopFrameFps,
-  });
-  const desktopFrameProvider = createDesktopFrameProvider(
-    {
-      provider: localCfg.desktopFrameProvider ?? resolved.desktopFrameProvider,
-      ttlMs: localCfg.desktopFrameTtlMs ?? resolved.desktopFrameTtlMs,
-      maxWidth: localCfg.desktopFrameMaxWidth,
-    },
-    logger,
-  );
-  const desktopFrameStreamOptions = {
-    fps: localCfg.desktopFrameFps ?? resolved.desktopFrameFps,
-  };
-
   const mediaDeps: ResolveMediaDeps = resolved.oss
     ? { uploader: createS3Uploader(resolved.oss) }
     : {};
@@ -112,8 +89,6 @@ export function startConnectorRuntime(input: ConnectorStartInput): ConnectorHand
     config.agentId,
     logger,
     openclawConfig,
-    desktopFrameProvider,
-    desktopFrameStreamOptions,
     mediaDeps,
   );
 
@@ -129,8 +104,6 @@ export function startConnectorRuntime(input: ConnectorStartInput): ConnectorHand
     onAgentInterrupt: async (msg) => {
       inboundHandler.interrupt(msg);
     },
-    onChannelSessionStarted: (msg) => inboundHandler.handleSessionStarted(msg),
-    onChannelSessionEnded: (msg) => inboundHandler.handleSessionEnded(msg),
     onStatus: setStatus,
   });
 
@@ -156,36 +129,4 @@ export function startConnectorRuntime(input: ConnectorStartInput): ConnectorHand
   }
 
   return { stop };
-}
-
-type LocalConfig = {
-  desktopFrameProvider?: "screen" | "fake";
-  desktopFrameFps?: number;
-  desktopFrameTtlMs?: number;
-  desktopFrameMaxWidth?: number;
-};
-
-function readLocalConfig(): LocalConfig {
-  try {
-    // Resolve uag-connector.json relative to this file (dist/src/channel-gateway.js → ../../uag-connector.json)
-    const dir = dirname(fileURLToPath(import.meta.url));
-    const path = join(dir, "..", "..", "uag-connector.json");
-    const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-    const out: LocalConfig = {};
-    if (raw["desktopFrameProvider"] === "screen" || raw["desktopFrameProvider"] === "fake") {
-      out.desktopFrameProvider = raw["desktopFrameProvider"];
-    }
-    if (typeof raw["desktopFrameFps"] === "number" && raw["desktopFrameFps"] > 0) {
-      out.desktopFrameFps = raw["desktopFrameFps"];
-    }
-    if (typeof raw["desktopFrameTtlMs"] === "number" && raw["desktopFrameTtlMs"] > 0) {
-      out.desktopFrameTtlMs = raw["desktopFrameTtlMs"];
-    }
-    if (typeof raw["desktopFrameMaxWidth"] === "number" && raw["desktopFrameMaxWidth"] > 0) {
-      out.desktopFrameMaxWidth = raw["desktopFrameMaxWidth"];
-    }
-    return out;
-  } catch {
-    return {};
-  }
 }

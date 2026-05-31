@@ -1,6 +1,5 @@
 import type { Logger } from "./logger.js";
 import { newMessageId } from "./message-id.js";
-import type { VisualFramePayload } from "./protocol.js";
 import type { MediaKind } from "./outbound-reply-payload.js";
 
 export type OutboundTransport = {
@@ -45,15 +44,6 @@ export class OutboundHandler {
   async sendFailed(error: unknown): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     await this.sendEvent("response.failed", { error: { message } });
-  }
-
-  async sendVisualSurfaceSelect(surface: string, reason?: string): Promise<void> {
-    await this.sendEvent("visual.surface.select", reason ? { surface, reason } : { surface });
-  }
-
-  async sendVisualFrame(payload: VisualFramePayload): Promise<void> {
-    const { type, ...extra } = payload;
-    await this.sendEvent(type, extra);
   }
 
   /**
