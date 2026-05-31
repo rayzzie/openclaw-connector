@@ -10,6 +10,8 @@ import { makeGatewayClient } from "./gateway-http-client.js";
 import { InboundHandler } from "./inbound-handler.js";
 import { Logger } from "./logger.js";
 import { resolveRuntimePluginConfig } from "./plugin-config.js";
+import { createS3Uploader } from "./s3-uploader.js";
+import type { ResolveMediaDeps } from "./outbound-media.js";
 import { acquireRuntimeStart } from "./runtime-start-guard.js";
 import { ConnectorRuntime, type ConnectorStatus } from "./runtime.js";
 
@@ -97,6 +99,13 @@ export function startConnectorRuntime(input: ConnectorStartInput): ConnectorHand
     fps: localCfg.desktopFrameFps ?? resolved.desktopFrameFps,
   };
 
+  const mediaDeps: ResolveMediaDeps = resolved.oss
+    ? { uploader: createS3Uploader(resolved.oss) }
+    : {};
+  logger.info("outbound media upload", {
+    oss: resolved.oss ? `${resolved.oss.endpoint}/${resolved.oss.bucket}` : "not configured",
+  });
+
   const inboundHandler = new InboundHandler(
     { send: (m) => currentSend(m) },
     runtime,
@@ -105,6 +114,7 @@ export function startConnectorRuntime(input: ConnectorStartInput): ConnectorHand
     openclawConfig,
     desktopFrameProvider,
     desktopFrameStreamOptions,
+    mediaDeps,
   );
 
   const gatewayClient = makeGatewayClient(resolved.gatewayUrl);

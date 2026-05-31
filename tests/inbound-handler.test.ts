@@ -336,6 +336,79 @@ describe("InboundHandler", () => {
     expect(payloads[2]).toMatchObject({ kind: "video", url: "https://a/clip.mp4" });
   });
 
+  it("uploads local outbound media via the uploader, then emits media.play with the public url", async () => {
+    const sent: object[] = [];
+    const transport = { send: async (m: object) => { sent.push(m); } };
+
+    const uploaded: { body: Uint8Array; opts: unknown }[] = [];
+    const uploader = {
+      upload: async (body: Uint8Array, opts?: unknown) => {
+        uploaded.push({ body, opts });
+        return "http://obs-nmhhht6.cucloud.cn/ruanyanyuan-temp/abc.png";
+      },
+    };
+    const readFile = async (_p: string) => new Uint8Array([7, 8, 9]);
+
+    const rt = {
+      channel: {
+        reply: {
+          dispatchReplyWithBufferedBlockDispatcher: vi.fn(
+            async ({ dispatcherOptions }: { dispatcherOptions: { deliver: (p: Record<string, unknown>) => Promise<void> } }) => {
+              await dispatcherOptions.deliver({ mediaUrl: "/tmp/cat.png" });
+            }
+          ),
+        },
+      },
+    } as unknown as PluginRuntime;
+
+    const handler = new InboundHandler(
+      transport, rt, "agent:main", undefined, undefined, undefined, undefined,
+      { uploader, readFile },
+    );
+    await handler.handle(makeRequest());
+
+    const payloads = sent.map(
+      (m) => (m as Record<string, unknown>)["payload"] as Record<string, unknown>,
+    );
+    expect(payloads.map((p) => p["type"])).toEqual([
+      "response.started",
+      "media.play",
+      "response.completed",
+    ]);
+    expect(payloads[1]).toMatchObject({
+      type: "media.play",
+      kind: "image",
+      url: "http://obs-nmhhht6.cucloud.cn/ruanyanyuan-temp/abc.png",
+    });
+    expect(Array.from(uploaded[0].body)).toEqual([7, 8, 9]); // local bytes uploaded
+  });
+
+  it("skips local outbound media (no media.play) when no uploader is configured", async () => {
+    const sent: object[] = [];
+    const transport = { send: async (m: object) => { sent.push(m); } };
+
+    const rt = {
+      channel: {
+        reply: {
+          dispatchReplyWithBufferedBlockDispatcher: vi.fn(
+            async ({ dispatcherOptions }: { dispatcherOptions: { deliver: (p: Record<string, unknown>) => Promise<void> } }) => {
+              await dispatcherOptions.deliver({ text: "看图", mediaUrl: "/tmp/cat.png" });
+            }
+          ),
+        },
+      },
+    } as unknown as PluginRuntime;
+
+    const handler = new InboundHandler(transport, rt, "agent:main");
+    await handler.handle(makeRequest());
+
+    const types = sent.map(
+      (m) => ((m as Record<string, unknown>)["payload"] as Record<string, unknown>)["type"],
+    );
+    // local media dropped (no uploader), but the text still flows
+    expect(types).toEqual(["response.started", "output.delta", "response.completed"]);
+  });
+
   it("streams default fake desktop frames between session started and ended", async () => {
     const sent: object[] = [];
     const transport = { send: async (m: object) => { sent.push(m); } };

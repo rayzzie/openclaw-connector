@@ -39,6 +39,46 @@ describe("resolvePluginConfig", () => {
     expect(() => resolvePluginConfig("string")).toThrow();
   });
 
+  it("leaves oss undefined when not configured", () => {
+    const cfg = resolvePluginConfig({
+      gatewayUrl: "http://x",
+      agentId: "a",
+      agentSk: "s",
+    });
+    expect(cfg.oss).toBeUndefined();
+  });
+
+  it("parses a complete oss block (region defaults to us-east-1)", () => {
+    const cfg = resolvePluginConfig({
+      gatewayUrl: "http://x",
+      agentId: "a",
+      agentSk: "s",
+      oss: {
+        endpoint: "http://obs-nmhhht6.cucloud.cn",
+        bucket: "ruanyanyuan-temp",
+        accessKeyId: "AK",
+        secretAccessKey: "SK",
+      },
+    });
+    expect(cfg.oss).toMatchObject({
+      endpoint: "http://obs-nmhhht6.cucloud.cn",
+      bucket: "ruanyanyuan-temp",
+      accessKeyId: "AK",
+      secretAccessKey: "SK",
+      region: "us-east-1",
+    });
+  });
+
+  it("ignores an incomplete oss block (missing keys → undefined)", () => {
+    const cfg = resolvePluginConfig({
+      gatewayUrl: "http://x",
+      agentId: "a",
+      agentSk: "s",
+      oss: { endpoint: "http://obs", bucket: "b" }, // no credentials
+    });
+    expect(cfg.oss).toBeUndefined();
+  });
+
   it("resolves runtime config from channel config when plugin config is empty", () => {
     const cfg = resolveRuntimePluginConfig(
       {},

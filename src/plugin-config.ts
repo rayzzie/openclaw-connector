@@ -1,3 +1,5 @@
+import type { S3UploaderConfig } from "./s3-uploader.js";
+
 export type PluginConfig = {
   gatewayUrl: string;
   agentId: string;
@@ -5,6 +7,8 @@ export type PluginConfig = {
   desktopFrameProvider: "screen" | "fake";
   desktopFrameFps: number;
   desktopFrameTtlMs: number;
+  /** S3-compatible object store for uploading non-remote outbound media. */
+  oss?: S3UploaderConfig;
 };
 
 export function resolvePluginConfig(raw: unknown): PluginConfig {
@@ -31,7 +35,36 @@ export function resolvePluginConfig(raw: unknown): PluginConfig {
     desktopFrameProvider: readDesktopFrameProvider(obj["desktopFrameProvider"]),
     desktopFrameFps: readPositiveNumber(obj["desktopFrameFps"], 1),
     desktopFrameTtlMs: readPositiveNumber(obj["desktopFrameTtlMs"], 2000),
+    oss: readOssConfig(obj["oss"]),
   };
+}
+
+/** Parse the optional OSS block; returns undefined unless it is complete. */
+function readOssConfig(value: unknown): S3UploaderConfig | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const endpoint = readString(value["endpoint"]);
+  const bucket = readString(value["bucket"]);
+  const accessKeyId = readString(value["accessKeyId"]);
+  const secretAccessKey = readString(value["secretAccessKey"]);
+  if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) {
+    return undefined;
+  }
+  return {
+    endpoint,
+    bucket,
+    accessKeyId,
+    secretAccessKey,
+    region: readString(value["region"]) ?? "us-east-1",
+    sessionToken: readString(value["sessionToken"]),
+    publicBaseUrl: readString(value["publicBaseUrl"]),
+    keyPrefix: readString(value["keyPrefix"]),
+  };
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 export function resolveRuntimePluginConfig(pluginConfig: unknown, openclawConfig: unknown): PluginConfig {

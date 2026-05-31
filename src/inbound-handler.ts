@@ -3,10 +3,10 @@ import type { AgentInterrupt, AgentRequest, ChannelSessionEnded, ChannelSessionS
 import { buildSessionKey } from "./session-key.js";
 import { OutboundHandler, type OutboundTransport } from "./outbound-handler.js";
 import {
-  detectMediaKind,
   resolveOutboundMediaUrls,
   type OutboundReplyPayload,
 } from "./outbound-reply-payload.js";
+import { resolveMediaRefToUrl, type ResolveMediaDeps } from "./outbound-media.js";
 import { newMessageId } from "./message-id.js";
 import type { Logger } from "./logger.js";
 import {
@@ -42,6 +42,7 @@ export class InboundHandler {
     private readonly cfg?: unknown,
     private readonly desktopFrameProvider: DesktopFrameProvider = new FakeDesktopFrameProvider(),
     private readonly desktopFrameStreamOptions: DesktopFrameStreamOptions = {},
+    private readonly mediaDeps: ResolveMediaDeps = {},
   ) {}
 
   async handle(request: AgentRequest): Promise<void> {
@@ -127,17 +128,24 @@ export class InboundHandler {
         cfg: this.cfg,
         dispatcherOptions: {
           deliver: async (payload: OutboundReplyPayload) => {
-            // Rich media first: forward each URL as a media.play event so the
-            // gateway can stream it onto the call's WebRTC downlink. Only the
-            // URL reference crosses the wire — never the media bytes.
+            // Rich media first: resolve each ref to a publicly fetchable URL
+            // (remote URLs pass through; local files / data: are uploaded to
+            // object storage) and forward it as a media.play event. Only the
+            // URL crosses the wire — never the media bytes.
             const mediaUrls = resolveOutboundMediaUrls(payload);
-            for (const url of mediaUrls) {
-              const kind = detectMediaKind(url);
+            for (const ref of mediaUrls) {
+              const resolved = await resolveMediaRefToUrl(ref, this.mediaDeps);
+              if (!resolved) {
+                this.logger?.warn("media skipped — non-remote ref but no uploader configured", {
+                  request_id: request.request_id,
+                });
+                continue;
+              }
               this.logger?.debug("deliver media", {
                 request_id: request.request_id,
-                kind,
+                kind: resolved.kind,
               });
-              await outbound.sendMediaPlay(url, kind);
+              await outbound.sendMediaPlay(resolved.url, resolved.kind);
             }
             if (payload.text) {
               deltaCount += 1;
